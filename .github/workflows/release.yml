@@ -75,7 +75,12 @@ jobs:
       # zip, because that is the only copy a HACS install ever sees.
       - run: npm --prefix card ci
       - run: npm --prefix card test
+      # CROWDSEC_MINIFY is release-only: the bundle that ships in the zip is
+      # minified, local builds stay readable. No CROWDSEC_BUILD_COUNTER here,
+      # so the released card reports the bare semver.
       - run: npm --prefix card run build
+        env:
+          CROWDSEC_MINIFY: "1"
 
       # HACS extracts the zip straight into custom_components/crowdsec, so
       # manifest.json has to sit at the root of the archive.

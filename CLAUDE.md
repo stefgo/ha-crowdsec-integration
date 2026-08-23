@@ -42,6 +42,11 @@ rises with every local deploy, and a dashboard whose console still prints the ol
 served a cached bundle. Releases built on GitHub never set the flag and stay at the
 plain semver from `card/package.json`.
 
+The other build flag is `CROWDSEC_MINIFY=1`, set only by the release workflow: terser
+runs there and nowhere else, so the bundle in the release zip is minified while every
+local build — `builddeploy.sh` and `watch` included — stays readable and lines up with
+`src/` when debugging in the browser. The rollup run prints which of the two it did.
+
 ## Architecture
 
 Data flows in one direction: `api.py` → `coordinator.py` → `CrowdSecData` → entities /

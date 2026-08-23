@@ -8,6 +8,20 @@ The section headings have to match the release tags: the release workflow
 reads the section for the tag it was started with and refuses to publish
 without one.
 
+## [1.3.4] – 2026-08-23
+
+Maintenance only — the integration and the card behave exactly as in 1.3.3.
+
+### Changed
+
+- The card bundle in the release zip is minified. terser now runs only when
+  the build is asked for it with `CROWDSEC_MINIFY=1`, which is set by the
+  release workflow and nowhere else: the released bundle is about a third
+  smaller, while every local build — `builddeploy.sh` and `watch` included —
+  keeps the readable output that lines up with the sources in the browser.
+  The minified file carries a `/*! crowdsec-bans-card <version> | MIT */`
+  preamble, so the version stays readable in the served file.
+
 ## [1.3.3] – 2026-08-23
 
 Maintenance only — the integration and the card behave exactly as in 1.3.2.
@@ -219,7 +233,10 @@ Documentation only — the integration and the card are byte-for-byte those of
   sensors for the Prometheus metrics, a problem indicator, services and an
   event on a new ban.
 
-[unreleased]: https://github.com/stefgo/ha-crowdsec-integration/compare/v1.3.1...HEAD
+[unreleased]: https://github.com/stefgo/ha-crowdsec-integration/compare/v1.3.4...HEAD
+[1.3.4]: https://github.com/stefgo/ha-crowdsec-integration/releases/tag/v1.3.4
+[1.3.3]: https://github.com/stefgo/ha-crowdsec-integration/releases/tag/v1.3.3
+[1.3.2]: https://github.com/stefgo/ha-crowdsec-integration/releases/tag/v1.3.2
 [1.3.1]: https://github.com/stefgo/ha-crowdsec-integration/releases/tag/v1.3.1
 [1.3.0]: https://github.com/stefgo/ha-crowdsec-integration/releases/tag/v1.3.0
 [1.2.0]: https://github.com/stefgo/ha-crowdsec-integration/releases/tag/v1.2.0
