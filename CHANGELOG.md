@@ -8,6 +8,21 @@ The section headings have to match the release tags: the release workflow
 reads the section for the tag it was started with and refuses to publish
 without one.
 
+## [1.3.3] – 2026-08-23
+
+Maintenance only — the integration and the card behave exactly as in 1.3.2.
+
+### Changed
+
+- The card build can stamp a local build counter into the version:
+  `builddeploy.sh` builds with `CROWDSEC_BUILD_COUNTER=1`, so a deployed
+  bundle reports `<semver>+build.<n>` and a dashboard still printing the
+  previous number is serving a cached bundle. Releases built on GitHub never
+  set the flag and stay at the plain semver.
+- `builddeploy.sh` takes its target from a git-ignored `.env`
+  (see `.env.example`) instead of a hard-coded host.
+- Development dependencies: TypeScript 5.9.3 → 6.0.3, vitest 4.1.10 → 4.1.11.
+
 ## [1.3.2] – 2026-08-23
 
 Documentation only — the integration and the card are byte-for-byte those of
