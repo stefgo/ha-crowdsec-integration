@@ -22,6 +22,12 @@ const { version } = JSON.parse(readFileSync("./package.json", "utf8"));
 const { build, builtAt, full } = nextBuild(version);
 console.log(`crowdsec-bans-card ${full} (${builtAt})`);
 
+// Only the GitHub release workflow sets CROWDSEC_MINIFY; local builds and
+// `watch` keep the readable bundle, so what a dashboard serves during
+// development is the same code that is in src/.
+const minify = process.env.CROWDSEC_MINIFY === "1";
+console.log(minify ? "minified build" : "readable build (set CROWDSEC_MINIFY=1 to minify)");
+
 // The target is the integration's www directory directly: the integration
 // serves the card itself, so no Lovelace resource has to be maintained by
 // hand.
@@ -42,7 +48,13 @@ export default defineConfig({
     resolve({ browser: true, preferBuiltins: false }),
     commonjs(),
     typescript({ tsconfig: "./tsconfig.json", declaration: false }),
-    terser({ format: { comments: false } }),
-  ],
+    minify &&
+      terser({
+        format: {
+          comments: false,
+          preamble: `/*! crowdsec-bans-card ${full} | MIT */`,
+        },
+      }),
+  ].filter(Boolean),
   context: "window",
 });
