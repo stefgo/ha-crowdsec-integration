@@ -11,6 +11,10 @@ venv/
 htmlcov/
 .DS_Store
 
-# Contains the target host and paths of a private instance — stays local.
-builddeploy.sh
+# Contains the target host of a private instance — builddeploy.sh itself is
+# tracked and reads it.
+.env
+
+# Local build counter of the card, per working copy.
+card/.build-number
 .venv-ha/

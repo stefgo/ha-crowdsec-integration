@@ -32,11 +32,15 @@ npm --prefix card test          # vitest
 npm --prefix card test -- filters.test.ts   # single file
 
 # Build the card and rsync the integration to a live HA instance
-./builddeploy.sh                # host/path via CROWDSEC_HOST / CROWDSEC_CONFIG
+./builddeploy.sh                # target from .env, see .env.example
 ```
 
-`builddeploy.sh` is in `.gitignore` (contains a private host) — it exists locally but is
-not tracked.
+`builddeploy.sh` is tracked; the private host lives in `.env` (git-ignored, copy
+`.env.example`). It builds with `CROWDSEC_BUILD_COUNTER=1`, so the deployed bundle
+reports `<semver>+build.<n>` instead of the bare version: the counter in `card/.build-number`
+rises with every local deploy, and a dashboard whose console still prints the old number
+served a cached bundle. Releases built on GitHub never set the flag and stay at the
+plain semver from `card/package.json`.
 
 ## Architecture
 
