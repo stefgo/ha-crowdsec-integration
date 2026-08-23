@@ -13,13 +13,9 @@ often as you like. Two Lovelace cards come with it: a table of everything
 CrowdSec is currently enforcing, with search, filters and one-click unban, and
 a lookup that answers whether one particular address is blocked.
 
-![The ban card: search field, status chips and the table of local decisions with
-country, network operator, origin, remaining time and the unban
-action](screenshots/crowdsec-bans-card.png)
+![The ban card: search field, status chips and the table of local decisions with country, network operator, origin, remaining time and the unban action](https://raw.githubusercontent.com/stefgo/ha-crowdsec-integration/main/screenshots/crowdsec-bans-card.png)
 
-![The lookup card: the verdict for an address, the decisions in force, the last
-24 hours from the alerts and the ban/unban
-controls](screenshots/crowdsec-ip-lookup-card.png)
+![The lookup card: the verdict for an address, the decisions in force, the last 24 hours from the alerts and the ban/unban controls](https://raw.githubusercontent.com/stefgo/ha-crowdsec-integration/main/screenshots/crowdsec-ip-lookup-card.png)
 
 ## Contents
 
