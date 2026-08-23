@@ -8,6 +8,35 @@ The section headings have to match the release tags: the release workflow
 reads the section for the tag it was started with and refuses to publish
 without one.
 
+## [1.3.2] – 2026-08-23
+
+Documentation only — the integration and the card are byte-for-byte those of
+1.3.1.
+
+### Fixed
+
+- The two card screenshots stayed blank in HACS. They were linked relatively,
+  which GitHub resolves against the repository while the Home Assistant
+  frontend resolves it against the HA instance — so the browser asked the
+  wrong host and got a 404. They are absolute raw URLs now.
+
+### Changed
+
+- The README leads with requirements and installation instead of ~300 lines
+  of reference, and has a table of contents; configuration, entities, cards,
+  automation, operation and development follow in that order.
+- Four statements in it did not match the code and were corrected: the scrape
+  duration covers three parallel queries, not two; active decisions always
+  comes from `cs_active_decisions` and never from the length of the
+  `/v1/decisions` list, which is what makes it count CAPI and blocklist bans;
+  reachable means the instance answered on any of the three queries; last
+  update is the last scrape in which no query failed.
+- The options are a table with defaults and the two validation rules, the
+  minimum Home Assistant version is documented rather than living only in
+  `hacs.json`, the WebSocket commands are described under Development with
+  the note that they are not a stable API, and the YAML examples use `action:`
+  instead of the deprecated `service:`.
+
 ## [1.3.1] – 2026-08-17
 
 ### Fixed
