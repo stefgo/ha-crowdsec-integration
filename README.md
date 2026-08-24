@@ -3,7 +3,7 @@
 [![Release](https://img.shields.io/github/v/release/stefgo/ha-crowdsec-integration?style=flat-square)](https://github.com/stefgo/ha-crowdsec-integration/releases)
 [![HACS: custom](https://img.shields.io/badge/HACS-custom-41BDF5?style=flat-square)](https://hacs.xyz/)
 [![Home Assistant 2025.2+](https://img.shields.io/badge/Home%20Assistant-2025.2%2B-41BDF5?style=flat-square)](https://www.home-assistant.io/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/stefgo/ha-crowdsec-integration/blob/main/LICENSE)
 
 Custom integration that maps one or more CrowdSec instances into Home
 Assistant — reachability, attack volume, throughput and enforcement.
@@ -84,7 +84,7 @@ install it, restart Home Assistant.
 
 Then go to *Settings → Devices & services → Add integration → CrowdSec*.
 
-What changed between versions is listed in [CHANGELOG.md](CHANGELOG.md); the
+What changed between versions is listed in [CHANGELOG.md](https://github.com/stefgo/ha-crowdsec-integration/blob/main/CHANGELOG.md); the
 same text is on the release page of each version.
 
 ## Configuration
@@ -370,7 +370,7 @@ automation:
 ### Push and badge on iOS/iPadOS
 
 A ready-made package for the Home Assistant companion app is available at
-[`examples/ios_push_badge.yaml`](examples/ios_push_badge.yaml). It sends a push
+[`examples/ios_push_badge.yaml`](https://github.com/stefgo/ha-crowdsec-integration/blob/main/examples/ios_push_badge.yaml). It sends a push
 notification on new bans and keeps the number on the app icon up to date.
 
 Pushing directly on `crowdsec_new_ban` is not a good idea during a burst of
@@ -547,7 +547,7 @@ together with the paging of the WebSocket answers and the card's own
 translations — German and English have to carry the same keys and the same
 placeholders. CI additionally runs `ruff`, `mypy`, `hassfest` and the HACS
 validation (see
-[.github/workflows/validate.yml](.github/workflows/validate.yml)).
+[.github/workflows/validate.yml](https://github.com/stefgo/ha-crowdsec-integration/blob/main/.github/workflows/validate.yml)).
 
 ### WebSocket commands
 
@@ -568,4 +568,4 @@ API — the shape of the answers can change with any release.
 
 ## License
 
-[MIT](LICENSE).
+[MIT](https://github.com/stefgo/ha-crowdsec-integration/blob/main/LICENSE).
