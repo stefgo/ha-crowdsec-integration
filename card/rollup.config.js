@@ -24,9 +24,16 @@ console.log(`crowdsec-bans-card ${full} (${builtAt})`);
 
 // Only the GitHub release workflow sets CROWDSEC_MINIFY; local builds and
 // `watch` keep the readable bundle, so what a dashboard serves during
-// development is the same code that is in src/.
+// development is the same code that is in src/. The same flag decides the
+// source map: it is what makes the minified bundle debuggable, so it belongs
+// to every local build and to none of the released ones, where it would only
+// travel along in the zip of every HACS install unread.
 const minify = process.env.CROWDSEC_MINIFY === "1";
-console.log(minify ? "minified build" : "readable build (set CROWDSEC_MINIFY=1 to minify)");
+console.log(
+  minify
+    ? "minified build, no source map"
+    : "readable build with source map (set CROWDSEC_MINIFY=1 to minify)",
+);
 
 // The target is the integration's www directory directly: the integration
 // serves the card itself, so no Lovelace resource has to be maintained by
@@ -36,7 +43,7 @@ export default defineConfig({
   output: {
     file: "../custom_components/crowdsec/www/crowdsec-bans-card.js",
     format: "es",
-    sourcemap: true,
+    sourcemap: !minify,
     intro: [
       `const CARD_VERSION = ${JSON.stringify(full)};`,
       `const CARD_SEMVER = ${JSON.stringify(version)};`,
