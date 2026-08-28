@@ -45,7 +45,9 @@ def sections(changelog: str) -> list[tuple[str, str]]:
     headings = list(HEADING.finditer(changelog))
     result = []
     for index, heading in enumerate(headings):
-        end = headings[index + 1].start() if index + 1 < len(headings) else len(changelog)
+        end = (
+            headings[index + 1].start() if index + 1 < len(headings) else len(changelog)
+        )
         body = changelog[heading.end() : end]
         # The link definitions at the end of the file belong to no section.
         body = re.split(r"^\[[^\]]+\]: ", body, maxsplit=1, flags=re.MULTILINE)[0]
