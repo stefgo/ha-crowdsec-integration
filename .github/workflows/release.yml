@@ -33,28 +33,8 @@ jobs:
       # The release notes come from CHANGELOG.md, so what the release page
       # says and what the repository says cannot drift apart. No section for
       # the tag means no release — writing the entry is part of releasing.
-      - name: Extract release notes from CHANGELOG.md
-        run: |
-          python - "${GITHUB_REF_NAME#v}" <<'PY'
-          import pathlib, re, sys
-
-          version = sys.argv[1]
-          text = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
-          # Stop at the next version heading, or at the block of link
-          # definitions that closes the file — those belong to no section.
-          match = re.search(
-              rf"^## \[{re.escape(version)}\][^\n]*\n(.*?)(?=^## |^\[[^\]]+\]: |\Z)",
-              text,
-              re.MULTILINE | re.DOTALL,
-          )
-          if match is None:
-              sys.exit(f"CHANGELOG.md has no section '## [{version}]'")
-          notes = match.group(1).strip()
-          if not notes:
-              sys.exit(f"The section '## [{version}]' in CHANGELOG.md is empty")
-          pathlib.Path("release-notes.md").write_text(notes + "\n", encoding="utf-8")
-          print(notes)
-          PY
+      - name: Assemble release notes
+        run: python .github/scripts/release_notes.py "${GITHUB_REF_NAME#v}" release-notes.md
 
       - uses: actions/setup-python@v7
         with:

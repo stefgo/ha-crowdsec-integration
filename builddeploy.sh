@@ -16,13 +16,13 @@ if [ -f .env ]; then
   set +a
 fi
 
-HOST="${CROWDSEC_HOST:-}"
-CONFIG="${CROWDSEC_CONFIG:-/config}"
-TARGET="${CROWDSEC_TARGET:-${CONFIG}/custom_components}"
-SSH_PORT="${CROWDSEC_SSH_PORT:-22}"
+HOST="${HA_HOST:-}"
+CONFIG="${HA_CONFIG:-/config}"
+TARGET="${HA_TARGET:-${CONFIG}/custom_components}"
+SSH_PORT="${HA_SSH_PORT:-22}"
 
 if [ -z "$HOST" ]; then
-  echo "CROWDSEC_HOST is not set. Copy .env.example to .env and fill it in." >&2
+  echo "HA_HOST is not set. Copy .env.example to .env and fill it in." >&2
   exit 1
 fi
 

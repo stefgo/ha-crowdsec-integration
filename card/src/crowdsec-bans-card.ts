@@ -287,7 +287,7 @@ export class CrowdSecBansCard extends LitElement {
     return html`
       <ha-card>
         ${this._renderHeader(counts)}
-        ${this._config.hide_filters ? nothing : this._renderFilters(counts)}
+        ${this._config.hide_filters ? nothing : this._renderFilters()}
         ${this._error ? html`<div class="error">${this._error}</div>` : nothing}
         ${this._notice
           ? html`<div class="notice">
@@ -358,7 +358,7 @@ export class CrowdSecBansCard extends LitElement {
     `;
   }
 
-  private _renderFilters(counts: Counts) {
+  private _renderFilters() {
     const t = this._t;
     const types = distinctValues(this._decisions, "type");
     const scopes = distinctValues(this._decisions, "scope");

@@ -19,6 +19,8 @@ ignore = [
     # The docstrings deliberately explain the "why" in prose; line breaks in
     # them are a readability decision, not a style violation.
     "E501",
+    # Prose uses en dashes for ranges ("10–50") and asides. They are meant.
+    "RUF002",
 ]
 
 [tool.ruff.lint.isort]

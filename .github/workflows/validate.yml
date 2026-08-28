@@ -76,6 +76,7 @@ jobs:
           cache: npm
           cache-dependency-path: card/package-lock.json
       - run: npm --prefix card ci
+      - run: npm --prefix card run lint
       # The elements themselves have no unit tests — the card setup has no DOM
       # environment — so without this a type error in them reaches CI only if
       # it happens to break the bundler as well.
