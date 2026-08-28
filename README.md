@@ -500,6 +500,10 @@ logger:
 
 ## Development
 
+How the integration is put together — modules, data flow and the reasoning
+behind the awkward parts — is documented in
+[docs/architecture.md](https://github.com/stefgo/ha-crowdsec-integration/blob/main/docs/architecture.md).
+
 ### Building the card
 
 The card is written in TypeScript and is **not** committed in built form. HACS
