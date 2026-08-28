@@ -8,7 +8,7 @@ The section headings have to match the release tags: the release workflow
 reads the section for the tag it was started with and refuses to publish
 without one.
 
-## [1.3.4] – 2026-08-23
+## [1.3.4] — 2026-08-23
 
 Maintenance only — the integration and the card behave exactly as in 1.3.3.
 
@@ -22,7 +22,7 @@ Maintenance only — the integration and the card behave exactly as in 1.3.3.
   The minified file carries a `/*! crowdsec-bans-card <version> | MIT */`
   preamble, so the version stays readable in the served file.
 
-## [1.3.3] – 2026-08-23
+## [1.3.3] — 2026-08-23
 
 Maintenance only — the integration and the card behave exactly as in 1.3.2.
 
@@ -37,7 +37,7 @@ Maintenance only — the integration and the card behave exactly as in 1.3.2.
   (see `.env.example`) instead of a hard-coded host.
 - Development dependencies: TypeScript 5.9.3 → 6.0.3, vitest 4.1.10 → 4.1.11.
 
-## [1.3.2] – 2026-08-23
+## [1.3.2] — 2026-08-23
 
 Documentation only — the integration and the card are byte-for-byte those of
 1.3.1.
@@ -66,7 +66,7 @@ Documentation only — the integration and the card are byte-for-byte those of
   the note that they are not a stable API, and the YAML examples use `action:`
   instead of the deprecated `service:`.
 
-## [1.3.1] – 2026-08-17
+## [1.3.1] — 2026-08-17
 
 ### Fixed
 
@@ -92,7 +92,7 @@ Documentation only — the integration and the card are byte-for-byte those of
   Actions to their current majors, which clears the Node 20 deprecation
   warning from every workflow run.
 
-## [1.3.0] – 2026-08-17
+## [1.3.0] — 2026-08-17
 
 ### Changed
 
@@ -139,7 +139,7 @@ Documentation only — the integration and the card are byte-for-byte those of
   decision the LAPI does not know by ID. It now falls back to the route by
   address, the same way the ban table already did.
 
-## [1.2.0] – 2026-08-17
+## [1.2.0] — 2026-08-17
 
 ### Added
 
@@ -197,7 +197,7 @@ Documentation only — the integration and the card are byte-for-byte those of
   front, since neither Go nor CrowdSec knows it.
 - The `ip` field of the WebSocket delete command was not validated at all.
 
-## [1.1.0] – 2026-08-15
+## [1.1.0] — 2026-08-15
 
 ### Added
 
@@ -216,7 +216,7 @@ Documentation only — the integration and the card are byte-for-byte those of
   alert processing were pulled apart into separate modules.
 - Code comments and documentation translated from German to English.
 
-## [1.0.1] – 2026-08-14
+## [1.0.1] — 2026-08-14
 
 ### Added
 
@@ -225,7 +225,7 @@ Documentation only — the integration and the card are byte-for-byte those of
   sends one buffered summary instead of a push per ban
   (`examples/ios_push_badge.yaml`).
 
-## [1.0.0] – 2026-08-14
+## [1.0.0] — 2026-08-14
 
 ### Added
 
@@ -233,13 +233,12 @@ Documentation only — the integration and the card are byte-for-byte those of
   sensors for the Prometheus metrics, a problem indicator, services and an
   event on a new ban.
 
-[unreleased]: https://github.com/stefgo/ha-crowdsec-integration/compare/v1.3.4...HEAD
-[1.3.4]: https://github.com/stefgo/ha-crowdsec-integration/releases/tag/v1.3.4
-[1.3.3]: https://github.com/stefgo/ha-crowdsec-integration/releases/tag/v1.3.3
-[1.3.2]: https://github.com/stefgo/ha-crowdsec-integration/releases/tag/v1.3.2
-[1.3.1]: https://github.com/stefgo/ha-crowdsec-integration/releases/tag/v1.3.1
-[1.3.0]: https://github.com/stefgo/ha-crowdsec-integration/releases/tag/v1.3.0
-[1.2.0]: https://github.com/stefgo/ha-crowdsec-integration/releases/tag/v1.2.0
-[1.1.0]: https://github.com/stefgo/ha-crowdsec-integration/releases/tag/v1.1.0
-[1.0.1]: https://github.com/stefgo/ha-crowdsec-integration/releases/tag/1.0.1
+[1.3.4]: https://github.com/stefgo/ha-crowdsec-integration/compare/v1.3.3...v1.3.4
+[1.3.3]: https://github.com/stefgo/ha-crowdsec-integration/compare/v1.3.2...v1.3.3
+[1.3.2]: https://github.com/stefgo/ha-crowdsec-integration/compare/v1.3.1...v1.3.2
+[1.3.1]: https://github.com/stefgo/ha-crowdsec-integration/compare/v1.3.0...v1.3.1
+[1.3.0]: https://github.com/stefgo/ha-crowdsec-integration/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/stefgo/ha-crowdsec-integration/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/stefgo/ha-crowdsec-integration/compare/1.0.1...v1.1.0
+[1.0.1]: https://github.com/stefgo/ha-crowdsec-integration/compare/1.0.0...1.0.1
 [1.0.0]: https://github.com/stefgo/ha-crowdsec-integration/releases/tag/1.0.0
