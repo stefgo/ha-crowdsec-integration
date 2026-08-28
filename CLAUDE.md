@@ -4,14 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-
 A Home Assistant custom integration (`custom_components/crowdsec/`) that polls one or
 more CrowdSec Security Engines, plus a Lit/TypeScript Lovelace card (`card/`) that the
 integration serves itself. Each CrowdSec instance is one config entry and one HA device;
 the integration can be added multiple times.
 
 ## Commands
-
 
 ```bash
 # Python tests (no Home Assistant needed — see "Testing" below)
@@ -31,6 +29,7 @@ npm --prefix card ci
 npm --prefix card run build     # writes custom_components/crowdsec/www/ (gitignored)
 npm --prefix card run watch     # rebuild on change
 npm --prefix card test          # vitest
+npm --prefix card run lint      # eslint
 npm --prefix card test -- filters.test.ts   # single file
 
 # Build the card and rsync the integration to a live HA instance
@@ -50,7 +49,6 @@ local build — `builddeploy.sh` and `watch` included — stays readable and lin
 `src/` when debugging in the browser. The rollup run prints which of the two it did.
 
 ## Architecture
-
 
 Data flows in one direction: `api.py` → `coordinator.py` → `CrowdSecData` → entities /
 websocket / diagnostics.
@@ -176,7 +174,6 @@ table can run edge to edge while text keeps its 12px inset. A new card belongs o
 get it from the release zip.
 
 ## Testing
-
 
 Two suites, deliberately apart. `tests/` runs on nothing but pytest — that is what keeps
 the pure-logic modules free of Home Assistant — and its coverage floor

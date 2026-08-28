@@ -9,7 +9,9 @@
     "watch": "rollup -c -w",
     "dev": "rollup -c -w",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "license": "MIT",
   "dependencies": {
@@ -20,9 +22,12 @@
     "@rollup/plugin-node-resolve": "^16.0.0",
     "@rollup/plugin-terser": "^1.0.0",
     "@rollup/plugin-typescript": "^12.1.0",
+    "eslint": "^9.39.5",
+    "globals": "^17.11.0",
     "rollup": "^4.30.0",
     "tslib": "^2.7.0",
     "typescript": "^6.0.3",
+    "typescript-eslint": "^8.68.0",
     "vitest": "^4.1.11"
   }
 }
