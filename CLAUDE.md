@@ -2,7 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## What this is
+## Project overview
+
 
 A Home Assistant custom integration (`custom_components/crowdsec/`) that polls one or
 more CrowdSec Security Engines, plus a Lit/TypeScript Lovelace card (`card/`) that the
@@ -10,6 +11,7 @@ integration serves itself. Each CrowdSec instance is one config entry and one HA
 the integration can be added multiple times.
 
 ## Commands
+
 
 ```bash
 # Python tests (no Home Assistant needed — see "Testing" below)
@@ -48,6 +50,7 @@ local build — `builddeploy.sh` and `watch` included — stays readable and lin
 `src/` when debugging in the browser. The rollup run prints which of the two it did.
 
 ## Architecture
+
 
 Data flows in one direction: `api.py` → `coordinator.py` → `CrowdSecData` → entities /
 websocket / diagnostics.
@@ -174,6 +177,7 @@ get it from the release zip.
 
 ## Testing
 
+
 Two suites, deliberately apart. `tests/` runs on nothing but pytest — that is what keeps
 the pure-logic modules free of Home Assistant — and its coverage floor
 (`--cov-fail-under=90`) applies to exactly those modules; the omit list lives in
@@ -191,8 +195,8 @@ placeholders.
 
 ## Releasing
 
-1. Add a `## [x.y.z]` section to `CHANGELOG.md` — the release workflow reads it as the
-   release notes and **fails without it**.
+1. Add a `## [x.y.z] — <date>` section to `CHANGELOG.md` — the release workflow reads it as the
+   release notes (`.github/scripts/release_notes.py`) and **fails without it**.
 2. Bump `version` in `manifest.json` (and `card/package.json`) — the workflow aborts if
    the tag does not match the manifest.
 3. Push a `v*` tag. `.github/workflows/release.yml` runs pytest + vitest, builds the card,
