@@ -8,6 +8,41 @@ The section headings have to match the release tags: the release workflow
 reads the section for the tag it was started with and refuses to publish
 without one.
 
+## [1.3.5] — 2026-08-29
+
+A maintenance release. The integration and the card behave exactly as in 1.3.4
+— what changed is how the project is built, checked and documented, so that all
+four ha-custom projects work the same way.
+
+### Added
+
+- `docs/architecture.md`: modules, data flow and the reasoning behind the parts
+  that are not obvious — the LAPI's two alert speeds, the local-only ban table,
+  the per-query availability. The README's development section points at it.
+- ESLint for the card sources. Deliberately syntactic only: the type system is
+  `npm --prefix card run typecheck`'s job, and no formatting rules, so it adds
+  a check without rewriting working code. It runs in CI next to the type check.
+
+### Changed
+
+- `builddeploy.sh` reads the shared `HA_HOST` / `HA_SSH_PORT` / `HA_CONFIG` /
+  `HA_TARGET` names from `.env` instead of the `CROWDSEC_*` ones. **An existing
+  local `.env` needs its variable names updated once**; `.env.example` shows the
+  new set.
+- The release notes come from `.github/scripts/release_notes.py`, which is now
+  identical across all four ha-custom repositories. Same behaviour as before:
+  no CHANGELOG section for the tag means no release.
+- Every CHANGELOG version carries a compare link, and the version headings use
+  the same dash as the other projects.
+
+### Fixed
+
+- `_renderFilters()` took a `Counts` argument it never used — found by the new
+  lint step, no change in behaviour.
+- The rollup build says which of the two bundles it produced (readable or
+  minified) instead of leaving it to be guessed.
+- The README's links to LICENSE and CHANGELOG pointed at the wrong paths.
+
 ## [1.3.4] — 2026-08-23
 
 Maintenance only — the integration and the card behave exactly as in 1.3.3.
@@ -233,6 +268,7 @@ Documentation only — the integration and the card are byte-for-byte those of
   sensors for the Prometheus metrics, a problem indicator, services and an
   event on a new ban.
 
+[1.3.5]: https://github.com/stefgo/ha-crowdsec-integration/compare/v1.3.4...v1.3.5
 [1.3.4]: https://github.com/stefgo/ha-crowdsec-integration/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/stefgo/ha-crowdsec-integration/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/stefgo/ha-crowdsec-integration/compare/v1.3.1...v1.3.2

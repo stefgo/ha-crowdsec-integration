@@ -1,6 +1,6 @@
 {
   "name": "crowdsec-bans-card",
-  "version": "1.3.4",
+  "version": "1.3.5",
   "description": "Lovelace card for the CrowdSec integration",
   "type": "module",
   "private": true,
