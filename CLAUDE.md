@@ -132,3 +132,22 @@ minified card and zips `custom_components/crowdsec` (manifest at the archive roo
 expects) *before* the release commit and the tag, and attaches the zip to the release.
 
 `.github/workflows/validate.yml` runs hassfest, HACS validation and pytest on push/PR.
+
+### The release notes are part of the commit
+
+Before every commit, read `.release/next.md` and bring it up to date with what the commit
+changes — in the same commit, not at release time.
+
+- A commit that changes what a user sees or has to do — a feature, a fix, a changed
+  default, a renamed setting, anything an upgrade needs — is reflected in the text. A
+  `feat`, `fix` or `perf` commit that leaves the file untouched needs a reason.
+- A commit that changes nothing for a user (`ci`, `test`, `refactor`, `docs`, `chore`,
+  most of `build`) leaves the file alone. No line is added for the sake of it.
+- Revise the text as a whole instead of appending a line per commit: it describes the
+  release, not its history. Merge what belongs together, and remove a sentence a later
+  commit made untrue — a feature taken back before the release is not in its notes.
+- Write for someone who uses the project, in their terms: what is new, why it matters,
+  what an upgrade needs. No file names and no internals; the list of commits below the
+  text already names every change.
+- The text goes below the HTML comment at the top of the file, with `###` headings. If
+  the file holds only the comment, the text starts with this commit.
