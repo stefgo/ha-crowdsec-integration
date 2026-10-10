@@ -100,6 +100,10 @@ sets `--import-mode=importlib` because module names collide otherwise.
 translations in sync; the card's vitest checks DE and EN carry the same keys and
 placeholders.
 
+Dependabot's pull requests are merged by
+`.github/workflows/dependabot-auto-merge.yml` once their Validate run is green; a red
+one stays open for a human.
+
 ## Releasing
 
 1. Add a `## [x.y.z] — <date>` section to `CHANGELOG.md` — the release workflow reads it as the
