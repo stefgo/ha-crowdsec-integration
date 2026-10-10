@@ -9,3 +9,9 @@ dev keeps the text; the stable release from main empties this file again.
 
 Nothing inside an HTML comment is published.
 -->
+
+No change to the integration itself.
+
+Releases are now produced by the release workflow all stefgo projects share. A version can
+be tried as a beta before it is released, and every release is described here by hand, above
+the list of commits.
