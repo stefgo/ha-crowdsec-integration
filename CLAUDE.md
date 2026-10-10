@@ -102,12 +102,32 @@ placeholders.
 
 ## Releasing
 
-1. Add a `## [x.y.z] — <date>` section to `CHANGELOG.md` — the release workflow reads it as the
-   release notes (`.github/scripts/release_notes.py`) and **fails without it**.
-2. Bump `version` in `manifest.json` (and `card/package.json`) — the workflow aborts if
-   the tag does not match the manifest.
-3. Push a `v*` tag. `.github/workflows/release.yml` runs pytest + vitest, builds the card,
-   zips `custom_components/crowdsec` (manifest at the archive root, as HACS expects) and
-   publishes.
+A release is started by hand, never by pushing a tag: **Actions → Create Release → Run
+workflow**, on `main` for a release or on `dev` for a beta (`x.y.z-beta.n`, a prerelease
+HACS offers only with beta versions switched on). **Never bump a version or create a
+`v*` tag by hand.**
+
+- `dry_run` (on by default) shows the next version and the complete notes in the run
+  summary and changes nothing.
+- `bump` (`auto` | `patch` | `minor` | `major`): `auto` reads the commit types — `feat`
+  raises the minor position, `fix`, `perf` and `revert` the patch position, every other
+  type releases nothing — so commit messages follow Conventional Commits. Any other value
+  is the step that is taken, whatever the commits say. `major` is the only way a major
+  version is created; a `BREAKING CHANGE:` footer raises the minor position.
+- **Every release is described by hand in `.release/next.md`** — what is new and what an
+  upgrade needs, written for someone who uses the integration. The text goes above the
+  generated list of commits, in the GitHub release and in `CHANGELOG.md`; a release
+  without it is refused. Write it as part of the change, not at release time. A beta
+  keeps the text, the release from `main` empties the file. `.release/footer.md` is the
+  installation part appended to every release page.
+- **`dev` is merged into `main` with its history — never squashed or rebased** — and
+  `main` back into `dev` before the next beta. The workflow checks both.
+
+`.github/workflows/release.yml` calls
+[stefgo/release-workflows](https://github.com/stefgo/release-workflows), which carries
+semantic-release and its configuration for every stefgo project. It runs `validate.yml`, writes the
+version to `manifest.json`, `card/package.json` and `card/package-lock.json`, builds the
+minified card and zips `custom_components/crowdsec` (manifest at the archive root, as HACS
+expects) *before* the release commit and the tag, and attaches the zip to the release.
 
 `.github/workflows/validate.yml` runs hassfest, HACS validation and pytest on push/PR.
