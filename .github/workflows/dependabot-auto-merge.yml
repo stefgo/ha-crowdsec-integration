@@ -1,0 +1,44 @@
+name: Merge Dependency Updates
+
+# Dependabot's answer to an outdated dependency is a pull request, and this
+# repository is maintained without pull requests. An update that is opened and
+# never merged is not a slower update, it is none.
+#
+# The gate is the pull request's own Validate run: this workflow starts when that
+# run has finished and merges only if it succeeded. A red run leaves the pull
+# request open and visible, which is the case that wants a human anyway.
+#
+# Deliberately not `gh pr merge --auto`: without branch protection there are no
+# required checks for auto-merge to wait on, and it merges immediately.
+on:
+  workflow_run:
+    workflows: [Validate]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  merge:
+    # Only a green run, only for a pull request, only Dependabot's. Anything
+    # else is skipped rather than failed.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]'
+    name: Merge once the checks are green
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # merge the pull request
+      pull-requests: write
+    steps:
+      # --match-head-commit: the green run belongs to one commit. If Dependabot
+      # has rebased the branch since, the merge is refused and the run for the
+      # new head decides.
+      - name: Merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: gh pr merge "$BRANCH" --squash --delete-branch --match-head-commit "$SHA"
