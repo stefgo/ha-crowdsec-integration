@@ -2,8 +2,10 @@ name: Validate
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
+  # release.yml runs these checks before it releases.
+  workflow_call:
   schedule:
     # Weekly: hassfest and HACS change their rules without anything being
     # committed here — yesterday's green run says little otherwise.

@@ -1,78 +1,78 @@
-name: Release
+name: Create Release
 
+# A release is an action, not a side effect of pushing a tag. It is started by
+# hand from the Actions tab -- on main for a release, on dev for a beta
+# (x.y.z-beta.n, a prerelease HACS offers only with beta versions switched on).
+# Versions and tags are never created by hand.
+#
+# What a release is, how its version is found and how its notes are put
+# together is the same for every stefgo project and lives in
+# https://github.com/stefgo/release-workflows. This file offers the inputs and
+# says what is particular here: the checks, the files that carry the version, and the zip HACS installs.
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run -- shows the next version and its notes, changes nothing"
+        type: boolean
+        default: true
+      bump:
+        description: "Version step"
+        type: choice
+        options: [auto, patch, minor, major]
+        default: auto
+
+# Two runs at once would read the same last tag and compute the same next
+# version. Not cancelling: a run cut off between the push and the publish
+# leaves a tag without a release.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  # In front of the checks: the branch, the hand-written notes in
+  # .release/next.md and the state of dev against main are known at dispatch,
+  # and the checks take minutes to get to them.
+  preflight:
+    uses: stefgo/release-workflows/.github/workflows/preflight.yml@v1
+    permissions:
+      contents: read
+
+  checks:
+    needs: preflight
+    uses: ./.github/workflows/validate.yml
+
   release:
-    name: Build and publish
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      # HACS shows the tag, the integration reports the manifest version — if
-      # the two drift apart, an update looks installed but is not. The card
-      # carries its own version and is bumped in the same step, so it is
-      # checked here too rather than being noticed months later.
-      - name: Check versions against tag
-        run: |
-          tag="${GITHUB_REF_NAME#v}"
-          read_version() { python -c "import json,sys;print(json.load(open(sys.argv[1]))['version'])" "$1"; }
-          for file in custom_components/crowdsec/manifest.json card/package.json; do
-            version=$(read_version "$file")
-            if [ "$tag" != "$version" ]; then
-              echo "Tag $GITHUB_REF_NAME does not match version $version in $file" >&2
-              exit 1
-            fi
-          done
-
-      # The release notes come from CHANGELOG.md, so what the release page
-      # says and what the repository says cannot drift apart. No section for
-      # the tag means no release — writing the entry is part of releasing.
-      - name: Assemble release notes
-        run: python .github/scripts/release_notes.py "${GITHUB_REF_NAME#v}" release-notes.md
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.13"
-      - run: pip install -r requirements_test.txt
-      - run: ruff check .
-      - run: ruff format --check .
-      - run: mypy
-      - run: pytest -q
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: card/package-lock.json
-
+    needs: checks
+    uses: stefgo/release-workflows/.github/workflows/release.yml@v1
+    permissions:
+      contents: write # release commit, tag and GitHub release
+      issues: write # @semantic-release/github comments on issues ...
+      pull-requests: write # ... and on pull requests
+    with:
+      dry_run: ${{ inputs.dry_run }}
+      bump: ${{ inputs.bump }}
+      # A BREAKING CHANGE footer raises the minor position; the major one is
+      # reserved for bump: major.
+      breaking: minor
+      release_name: "CrowdSec {{version}}"
+      # The version lives in the manifest (what Home Assistant reports) and in
+      # the card's package; the three files have to agree.
+      version_files: |
+        custom_components/crowdsec/manifest.json
+        card/package.json
+        card/package-lock.json
       # The built card is not committed; it is created here and travels in the
-      # zip, because that is the only copy a HACS install ever sees.
-      - run: npm --prefix card ci
-      - run: npm --prefix card test
-      # CROWDSEC_MINIFY is release-only: the bundle that ships in the zip is
-      # minified, local builds stay readable. No CROWDSEC_BUILD_COUNTER here,
-      # so the released card reports the bare semver.
-      - run: npm --prefix card run build
-        env:
-          CROWDSEC_MINIFY: "1"
-
-      # HACS extracts the zip straight into custom_components/crowdsec, so
+      # zip, because that is the only copy a HACS install ever sees. Run before
+      # the commit and the tag, so a failing build leaves neither behind.
+      # CROWDSEC_MINIFY is release-only: local builds stay readable. HACS
+      # extracts the zip straight into custom_components/crowdsec, so
       # manifest.json has to sit at the root of the archive.
-      - name: Build crowdsec.zip
-        run: |
-          cd custom_components/crowdsec
-          zip -r "$GITHUB_WORKSPACE/crowdsec.zip" . -x '*__pycache__*' '*.pyc'
-
-      - name: Publish release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" crowdsec.zip \
-            --title "CrowdSec ${GITHUB_REF_NAME#v}" \
-            --notes-file release-notes.md
+      build_command: |
+        npm --prefix card ci
+        CROWDSEC_MINIFY=1 npm --prefix card run build
+        (cd custom_components/crowdsec && zip -r "$OLDPWD/crowdsec.zip" . -x '*__pycache__*' '*.pyc')
+      release_assets: crowdsec.zip

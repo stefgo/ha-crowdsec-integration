@@ -1,3 +1,9 @@
+# `pre-commit install` sets up both hook types below; run it again after
+# pulling this change so the commit-msg hook exists.
+default_install_hook_types: [pre-commit, commit-msg]
+# The formatting hooks belong to the commit, not to its message.
+default_stages: [pre-commit]
+
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.8.6
@@ -13,3 +19,16 @@ repos:
       - id: check-yaml
       - id: end-of-file-fixer
       - id: trailing-whitespace
+
+  # The commit type is what the release workflow takes the version from with
+  # bump: auto, so the message is checked like code (commitlint.config.mjs).
+  - repo: local
+    hooks:
+      - id: commitlint
+        name: commitlint
+        language: node
+        additional_dependencies:
+          - "@commitlint/cli@21.2.3"
+          - "@commitlint/config-conventional@21.2.3"
+        entry: commitlint --edit
+        stages: [commit-msg]

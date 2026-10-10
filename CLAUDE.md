@@ -106,12 +106,52 @@ one stays open for a human.
 
 ## Releasing
 
-1. Add a `## [x.y.z] — <date>` section to `CHANGELOG.md` — the release workflow reads it as the
-   release notes (`.github/scripts/release_notes.py`) and **fails without it**.
-2. Bump `version` in `manifest.json` (and `card/package.json`) — the workflow aborts if
-   the tag does not match the manifest.
-3. Push a `v*` tag. `.github/workflows/release.yml` runs pytest + vitest, builds the card,
-   zips `custom_components/crowdsec` (manifest at the archive root, as HACS expects) and
-   publishes.
+A release is started by hand, never by pushing a tag: **Actions → Create Release → Run
+workflow**, on `main` for a release or on `dev` for a beta (`x.y.z-beta.n`, a prerelease
+HACS offers only with beta versions switched on). **Never bump a version or create a
+`v*` tag by hand.**
+
+- `dry_run` (on by default) shows the next version and the complete notes in the run
+  summary and changes nothing.
+- `bump` (`auto` | `patch` | `minor` | `major`): `auto` reads the commit types — `feat`
+  raises the minor position, `fix`, `perf` and `revert` the patch position, every other
+  type releases nothing — so commit messages follow Conventional Commits, checked against
+  `commitlint.config.mjs` by the commit-msg hook of `.pre-commit-config.yaml`. Any other value
+  is the step that is taken, whatever the commits say. `major` is the only way a major
+  version is created; a `BREAKING CHANGE:` footer raises the minor position.
+- **Every release is described by hand in `.release/next.md`** — what is new and what an
+  upgrade needs, written for someone who uses the integration. The text goes above the
+  generated list of commits, in the GitHub release and in `CHANGELOG.md`; a release
+  without it is refused. Write it as part of the change, not at release time. A beta
+  keeps the text, the release from `main` empties the file. `.release/footer.md` is the
+  installation part appended to every release page.
+- **`dev` is merged into `main` with its history — never squashed or rebased** — and
+  `main` back into `dev` before the next beta. The workflow checks both.
+
+`.github/workflows/release.yml` calls
+[stefgo/release-workflows](https://github.com/stefgo/release-workflows), which carries
+semantic-release and its configuration for every stefgo project. It runs `validate.yml`, writes the
+version to `manifest.json`, `card/package.json` and `card/package-lock.json`, builds the
+minified card and zips `custom_components/crowdsec` (manifest at the archive root, as HACS
+expects) *before* the release commit and the tag, and attaches the zip to the release.
 
 `.github/workflows/validate.yml` runs hassfest, HACS validation and pytest on push/PR.
+
+### The release notes are part of the commit
+
+Before every commit, read `.release/next.md` and bring it up to date with what the commit
+changes — in the same commit, not at release time.
+
+- A commit that changes what a user sees or has to do — a feature, a fix, a changed
+  default, a renamed setting, anything an upgrade needs — is reflected in the text. A
+  `feat`, `fix` or `perf` commit that leaves the file untouched needs a reason.
+- A commit that changes nothing for a user (`ci`, `test`, `refactor`, `docs`, `chore`,
+  most of `build`) leaves the file alone. No line is added for the sake of it.
+- Revise the text as a whole instead of appending a line per commit: it describes the
+  release, not its history. Merge what belongs together, and remove a sentence a later
+  commit made untrue — a feature taken back before the release is not in its notes.
+- Write for someone who uses the project, in their terms: what is new, why it matters,
+  what an upgrade needs. No file names and no internals; the list of commits below the
+  text already names every change.
+- The text goes below the HTML comment at the top of the file, with `###` headings. If
+  the file holds only the comment, the text starts with this commit.
