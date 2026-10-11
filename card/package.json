@@ -28,7 +28,7 @@
     "rollup": "^4.63.0",
     "tslib": "^2.7.0",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.70.0",
+    "typescript-eslint": "^8.71.1",
     "vitest": "^5.0.0"
   }
 }
