@@ -42,6 +42,7 @@ from .const import (
     CONF_MACHINE_ID,
     CONF_MACHINE_PASSWORD,
     CONF_METRICS_URL,
+    CONF_NO_LINES_INTERVALS,
     CONF_PARSE_ERROR_THRESHOLD,
     DEFAULT_ALERTS_FULL_INTERVAL,
     DEFAULT_ALERTS_LIMIT,
@@ -49,6 +50,7 @@ from .const import (
     DEFAULT_LAPI_PORT,
     DEFAULT_METRICS_PORT,
     DEFAULT_NAME,
+    DEFAULT_NO_LINES_INTERVALS,
     DEFAULT_PARSE_ERROR_THRESHOLD,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_TIMEOUT,
@@ -64,6 +66,12 @@ SECRET_SELECTOR = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD
 # Input box instead of a slider: the number of intervals is typed directly.
 BOUNCER_IDLE_INTERVALS_SELECTOR = NumberSelector(
     NumberSelectorConfig(min=1, max=100, step=1, mode=NumberSelectorMode.BOX)
+)
+
+# Up to a day at the default interval — a short poll interval needs more of
+# them for the same stretch of time.
+NO_LINES_INTERVALS_SELECTOR = NumberSelector(
+    NumberSelectorConfig(min=1, max=1440, step=1, mode=NumberSelectorMode.BOX)
 )
 
 # Applies per request; the upper bound keeps it well below the poll interval.
@@ -338,6 +346,9 @@ class CrowdSecOptionsFlow(OptionsFlow):
             user_input[CONF_BOUNCER_IDLE_INTERVALS] = int(
                 user_input[CONF_BOUNCER_IDLE_INTERVALS]
             )
+            user_input[CONF_NO_LINES_INTERVALS] = int(
+                user_input[CONF_NO_LINES_INTERVALS]
+            )
             user_input[CONF_TIMEOUT] = int(user_input[CONF_TIMEOUT])
             user_input[CONF_ALERTS_LIMIT] = int(user_input[CONF_ALERTS_LIMIT])
             user_input[CONF_ALERTS_FULL_INTERVAL] = int(
@@ -379,6 +390,12 @@ class CrowdSecOptionsFlow(OptionsFlow):
                         CONF_BOUNCER_IDLE_INTERVALS, DEFAULT_BOUNCER_IDLE_INTERVALS
                     ),
                 ): BOUNCER_IDLE_INTERVALS_SELECTOR,
+                vol.Required(
+                    CONF_NO_LINES_INTERVALS,
+                    default=options.get(
+                        CONF_NO_LINES_INTERVALS, DEFAULT_NO_LINES_INTERVALS
+                    ),
+                ): NO_LINES_INTERVALS_SELECTOR,
                 vol.Required(
                     CONF_ALERTS_LIMIT,
                     default=options.get(CONF_ALERTS_LIMIT, DEFAULT_ALERTS_LIMIT),

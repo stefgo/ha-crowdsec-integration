@@ -121,6 +121,7 @@ changed while it runs.
 | Request timeout | 15 s | Applies **per request**. Must be lower than the polling interval, otherwise cycles would overlap. For an instance behind a VPN or a slow proxy a higher value helps. |
 | Parse error threshold | 5 % | Above this, `Status` turns on — the log format no longer matches the parser. |
 | Intervals without bouncer queries before a problem | 5 | How many cycles in a row a bouncer may go without fetching decisions before it counts as stopped and `Status` turns on. Applies to each bouncer on its own. |
+| Intervals without log lines before a problem | 30 | How many cycles in a row CrowdSec may process no log lines before `Status` reports it as blind. A quiet instance has single minutes without a line; raise it if yours is quiet for longer, lower it to hear sooner. |
 | Alerts per query (24h) | 1000 | Size of a single alert query. If it is hit, the time window is split and queried again, so the 24h numbers stay complete. Very high values slow down every cycle. |
 | Full alert refresh | 300 s | How often the whole 24h window is refetched. Must not be shorter than the polling interval. See below. |
 
@@ -418,7 +419,7 @@ To adjust before use: the service name of the companion app in the notify group
 | --- | --- | --- |
 | `unreachable` | error | none of the three queries came through |
 | `query-failed` | warning | one or two of the queries failed — the text is the error |
-| `no-log-lines` | error | no log lines are processed any more although there were some before — CrowdSec is blind |
+| `no-log-lines` | error | no log lines were processed for the configured number of intervals although there were some before — CrowdSec is blind |
 | `parse-errors` | warning | the parse error rate is above the threshold — the log format no longer matches the parser |
 | `bouncer-idle` | error | a bouncer has not fetched decisions for N intervals — its decisions are not being enforced. One entry per bouncer, with its name in `bouncer` |
 | `no-bouncer-queries` | error | no bouncer is known and none fetches decisions, or CrowdSec only counts them all together and the sum stays at zero |
