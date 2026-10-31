@@ -8,6 +8,63 @@ An entry is put together by the release workflow: the text written by hand in
 are added to the release page and do not belong in an entry. The entries up to
 1.3.5 were written by hand as a whole.
 
+## [1.4.0](https://github.com/stefgo/ha-crowdsec-integration/compare/v1.3.6...v1.4.0) (2026-10-31)
+
+### Each bouncer is watched on its own
+
+A bouncer is what actually blocks: CrowdSec decides, the bouncer enforces. If it
+stops, nothing is blocked any more and nothing looks wrong. Until now the
+integration only knew the requests of all bouncers together, and that sum
+included its own decision query — so the "no bouncer queries" problem could
+never trigger while Home Assistant was running, and one stopped bouncer was
+hidden by any other still running.
+
+- **New: `Bouncer <name>`** — one entity per bouncer, on while it fetches
+  decisions, off once it has not done so for the configured number of intervals.
+  Bouncers appear by themselves and stay known across restarts.
+- **New: `Active bouncers`** — how many bouncers are fetching decisions, with
+  the list as attribute.
+- **`Status`** names the bouncer that stopped.
+- **To ignore a bouncer, disable its entity** — for a bouncer that is gone, or
+  for the key of the integration itself if it shows up as `homeassistant`.
+- `Bouncer queries per minute` now counts the bouncers only and is about one
+  query per minute lower than before. With `prometheus.level: aggregated`,
+  where CrowdSec counts no bouncers individually, it is the sum without the
+  integration's own queries, as before but corrected.
+
+### Problems with a severity
+
+`Status` has a new attribute `problems`: every reason with `severity` (error or
+warning), a fixed `type`, the text and `since`. Templates and automations can
+tell errors from warnings without matching the wording. `reasons` stays as it
+was.
+
+### Fixes
+
+- **`New bans 24h` and the Top sensors count only what this instance detected.**
+  Until now every blocklist and CAPI refresh was counted as well, so an instance with
+  subscribed blocklists showed tens of thousands of bans it never made, and
+  `Top scenario 24h` read `update : +15000/-0 IPs`. The same refreshes also fired a
+  `crowdsec_new_ban` event without an IP; that no longer happens. Expect the numbers
+  to drop sharply after the upgrade — they now match the ban table.
+- **`Status` no longer flaps on quiet instances.** "No log lines processed" used to
+  trigger after a single interval without log lines. It now waits for the new option
+  **Intervals without log lines before a problem** (default 30, which is 30 minutes at
+  the default poll interval). Raise it for an instance that is quiet for longer
+  stretches, lower it to hear about a blind CrowdSec sooner.
+- **Ready for Home Assistant 2027.8.** The integration no longer uses a device
+  registry call that Home Assistant removes in 2027.8 and warns about until then.
+
+### Features
+
+* Watch each bouncer on its own and report problems with a severity ([f83657c](https://github.com/stefgo/ha-crowdsec-integration/commit/f83657cc095f8027ad366a0e9c190242feb205b9))
+
+### Bug Fixes
+
+* Leave blocklist and CAPI alerts out of the 24h numbers ([dec5932](https://github.com/stefgo/ha-crowdsec-integration/commit/dec59324522bcc44539cbfb747922474f9f3ba65)), closes [#23](https://github.com/stefgo/ha-crowdsec-integration/issues/23)
+* Look up the device by identifier for Home Assistant 2027.8 ([529086b](https://github.com/stefgo/ha-crowdsec-integration/commit/529086b66e4ddba359392f216af4ab5fb54a25bd)), closes [#26](https://github.com/stefgo/ha-crowdsec-integration/issues/26)
+* Tolerate quiet intervals before reporting missing log lines ([ed6d5f0](https://github.com/stefgo/ha-crowdsec-integration/commit/ed6d5f0f258f0bb470fe24985ff8816d181b5552)), closes [#25](https://github.com/stefgo/ha-crowdsec-integration/issues/25)
+
 ## [1.3.6](https://github.com/stefgo/ha-crowdsec-integration/compare/v1.3.5...v1.3.6) (2026-10-10)
 
 No change to the integration itself.
