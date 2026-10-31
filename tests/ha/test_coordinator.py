@@ -463,3 +463,70 @@ async def test_the_alert_window_may_empty_out_while_the_query_works(
 
     assert empty.alerts_ok is True
     assert empty.last_alert is None
+
+
+# -- Device version ---------------------------------------------------------
+
+
+def _metrics_with_version(version: str):
+    from custom_components.crowdsec.metrics import MetricSet, parse_prometheus
+
+    from .conftest import METRICS_TEXT
+
+    return MetricSet(
+        parse_prometheus(
+            METRICS_TEXT.replace('version="v1.6.3"', f'version="{version}"')
+        )
+    )
+
+
+def _device(hass, entry):
+    from homeassistant.helpers import device_registry as dr
+
+    from custom_components.crowdsec.const import DOMAIN
+
+    devices = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
+    assert len(devices) == 1
+    assert (DOMAIN, entry.entry_id) in devices[0].identifiers
+    return devices[0]
+
+
+async def test_a_crowdsec_update_reaches_the_device(hass, loaded_entry, fake_client):
+    coordinator = loaded_entry.runtime_data
+    assert _device(hass, loaded_entry).sw_version == "v1.6.3"
+
+    fake_client.metrics_fn = lambda: _metrics_with_version("v1.7.0")
+    await refresh(hass, coordinator)
+
+    assert _device(hass, loaded_entry).sw_version == "v1.7.0"
+
+
+async def test_the_device_is_found_by_identifier_where_available(
+    hass, loaded_entry, fake_client, monkeypatch
+):
+    """Home Assistant 2027.8 drops async_get_device; its successor is used."""
+    from homeassistant.helpers import device_registry as dr
+
+    from custom_components.crowdsec.const import DOMAIN
+
+    registry = dr.async_get(hass)
+    device = _device(hass, loaded_entry)
+    calls: list[tuple[tuple[str, str], str]] = []
+
+    def by_identifier(identifier, config_entry_id):
+        calls.append((identifier, config_entry_id))
+        return device
+
+    def deprecated(*args, **kwargs):
+        raise AssertionError("the deprecated lookup must not be used")
+
+    monkeypatch.setattr(
+        registry, "async_get_device_by_identifier", by_identifier, raising=False
+    )
+    monkeypatch.setattr(registry, "async_get_device", deprecated)
+
+    fake_client.metrics_fn = lambda: _metrics_with_version("v1.7.0")
+    await refresh(hass, loaded_entry.runtime_data)
+
+    assert calls == [((DOMAIN, loaded_entry.entry_id), loaded_entry.entry_id)]
+    assert _device(hass, loaded_entry).sw_version == "v1.7.0"

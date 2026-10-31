@@ -772,7 +772,15 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
             return
 
         registry = dr.async_get(self.hass)
-        device = registry.async_get_device(identifiers={(DOMAIN, entry.entry_id)})
+        identifier = (DOMAIN, entry.entry_id)
+        # async_get_device is deprecated and stops working in Home Assistant
+        # 2027.8. Its successor does not exist in the older versions this
+        # integration still supports; the fallback goes once the minimum
+        # version in hacs.json has it.
+        if hasattr(registry, "async_get_device_by_identifier"):
+            device = registry.async_get_device_by_identifier(identifier, entry.entry_id)
+        else:
+            device = registry.async_get_device(identifiers={identifier})
         if device is None:
             # The entities have not been created yet — they will fill in the
             # version themselves anyway.

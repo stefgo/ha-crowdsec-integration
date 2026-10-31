@@ -55,8 +55,13 @@ On the CrowdSec side, three things:
 2. **Create machine credentials** for the LAPI:
 
    ```bash
-   sudo cscli machines add homeassistant --password '<password>'
+   sudo cscli machines add homeassistant --password '<password>' -f /dev/null
    ```
+
+   Keep `-f /dev/null`: without it cscli writes the new credentials to
+   `/etc/crowdsec/local_api_credentials.yaml`, and where the agent and the LAPI
+   share a host or container that file holds the agent's own credentials —
+   overwriting it locks the agent out of its LAPI.
 
    They are needed for `/v1/alerts` (New bans 24h, Top scenario) and for
    `/v1/decisions`, which is the list behind the card's table and behind the
@@ -333,7 +338,8 @@ hide_ban: false
 | `crowdsec.refresh` | polls immediately instead of waiting for the interval |
 
 All three expect the instance as `config_entry_id`. `ip` takes a single address
-or a CIDR range, `duration` the cscli format (`30m`, `4h`, `1d`). After a ban
+or a CIDR range, `duration` the Go duration format (`30m`, `4h`, `1h30m`);
+there is no day unit, so a day is `24h`. After a ban
 and an unban the integration refreshes the values by itself.
 
 ```yaml

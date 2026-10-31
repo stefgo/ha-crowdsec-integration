@@ -38,3 +38,8 @@ hidden by any other still running.
 warning), a fixed `type`, the text and `since`. Templates and automations can
 tell errors from warnings without matching the wording. `reasons` stays as it
 was.
+
+### Fixes
+
+- **Ready for Home Assistant 2027.8.** The integration no longer uses a device
+  registry call that Home Assistant removes in 2027.8 and warns about until then.
