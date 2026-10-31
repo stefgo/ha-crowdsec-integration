@@ -207,6 +207,7 @@ async def test_the_options_are_stored(hass, loaded_entry):
                 "timeout": 20,
                 "parse_error_threshold": 7.5,
                 "bouncer_idle_intervals": 3,
+                "no_lines_intervals": 45,
                 "alerts_limit": 500,
                 "alerts_full_interval": 600,
             },
@@ -215,6 +216,7 @@ async def test_the_options_are_stored(hass, loaded_entry):
 
     assert done["type"] is FlowResultType.CREATE_ENTRY
     assert loaded_entry.options["alerts_full_interval"] == 600
+    assert loaded_entry.options["no_lines_intervals"] == 45
 
 
 async def test_a_timeout_above_the_interval_is_refused(hass, loaded_entry):
@@ -228,6 +230,7 @@ async def test_a_timeout_above_the_interval_is_refused(hass, loaded_entry):
             "timeout": 30,
             "parse_error_threshold": 5.0,
             "bouncer_idle_intervals": 5,
+            "no_lines_intervals": 30,
             "alerts_limit": 1000,
             "alerts_full_interval": 300,
         },
@@ -248,6 +251,7 @@ async def test_a_full_refresh_below_the_interval_is_refused(hass, loaded_entry):
             "timeout": 20,
             "parse_error_threshold": 5.0,
             "bouncer_idle_intervals": 5,
+            "no_lines_intervals": 30,
             "alerts_limit": 1000,
             "alerts_full_interval": 120,
         },

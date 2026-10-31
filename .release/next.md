@@ -38,3 +38,19 @@ hidden by any other still running.
 warning), a fixed `type`, the text and `since`. Templates and automations can
 tell errors from warnings without matching the wording. `reasons` stays as it
 was.
+
+### Fixes
+
+- **`New bans 24h` and the Top sensors count only what this instance detected.**
+  Until now every blocklist and CAPI refresh was counted as well, so an instance with
+  subscribed blocklists showed tens of thousands of bans it never made, and
+  `Top scenario 24h` read `update : +15000/-0 IPs`. The same refreshes also fired a
+  `crowdsec_new_ban` event without an IP; that no longer happens. Expect the numbers
+  to drop sharply after the upgrade — they now match the ban table.
+- **`Status` no longer flaps on quiet instances.** "No log lines processed" used to
+  trigger after a single interval without log lines. It now waits for the new option
+  **Intervals without log lines before a problem** (default 30, which is 30 minutes at
+  the default poll interval). Raise it for an instance that is quiet for longer
+  stretches, lower it to hear about a blind CrowdSec sooner.
+- **Ready for Home Assistant 2027.8.** The integration no longer uses a device
+  registry call that Home Assistant removes in 2027.8 and warns about until then.

@@ -40,6 +40,7 @@ CONF_MACHINE_PASSWORD = "machine_password"
 CONF_BOUNCER_API_KEY = "bouncer_api_key"
 CONF_PARSE_ERROR_THRESHOLD = "parse_error_threshold"
 CONF_BOUNCER_IDLE_INTERVALS = "bouncer_idle_intervals"
+CONF_NO_LINES_INTERVALS = "no_lines_intervals"
 CONF_ALERTS_LIMIT = "alerts_limit"
 CONF_ALERTS_FULL_INTERVAL = "alerts_full_interval"
 
@@ -51,6 +52,10 @@ DEFAULT_SCAN_INTERVAL = 60
 DEFAULT_TIMEOUT = 15
 DEFAULT_PARSE_ERROR_THRESHOLD = 5.0
 DEFAULT_BOUNCER_IDLE_INTERVALS = 5
+# A home instance can go a few minutes without a single log line; a blind
+# CrowdSec stays silent for good. Half an hour at the default interval tells
+# the two apart without letting the status flap.
+DEFAULT_NO_LINES_INTERVALS = 30
 
 # Time window for the 24h evaluation via the LAPI.
 ALERTS_SINCE = "24h"

@@ -110,3 +110,29 @@ def test_alert_timestamp_falls_back_to_start_at():
     assert alert_timestamp({"start_at": "2026-08-15T12:00:00Z"}) == NOW
     assert alert_timestamp({"created_at": "nonsense"}) is None
     assert alert_timestamp({}) is None
+
+
+def test_capi_and_blocklist_pulls_stay_out_of_the_window():
+    """A pull is not a detection: it must not count as tens of thousands of bans."""
+    pull = make_alert(900, scenario="update : +15000/-0 IPs", ip="")
+    pull["source"]["scope"] = "crowdsecurity/community-blocklist"
+    pull["decisions"] = [
+        {"type": "ban", "duration": "24h", "value": f"198.51.100.{i}", "origin": "CAPI"}
+        for i in range(50)
+    ]
+    blocklist = make_alert(901, scenario="update : +722/-0 IPs", ip="")
+    blocklist["source"]["scope"] = "lists:firehol"
+    blocklist["decisions"] = []
+
+    cache = AlertCache(WINDOW)
+    added = cache.add([make_alert(1), pull, blocklist])
+
+    assert added == 1
+    summary = summarize_alerts(cache.alerts, 5)
+    assert summary.alerts == 1
+    assert summary.ban_decisions == 1
+    assert [ban.alert_id for ban in summary.bans] == ["id:1"]
+    assert summary.top_scenario == "crowdsecurity/ssh-bf"
+
+    cache.replace([pull, make_alert(2)])
+    assert len(cache) == 1

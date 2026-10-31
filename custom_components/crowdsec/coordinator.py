@@ -45,6 +45,7 @@ from .const import (
     CONF_ALERTS_FULL_INTERVAL,
     CONF_ALERTS_LIMIT,
     CONF_BOUNCER_IDLE_INTERVALS,
+    CONF_NO_LINES_INTERVALS,
     CONF_PARSE_ERROR_THRESHOLD,
     COUNTER_BOUNCER,
     COUNTER_LINES,
@@ -54,6 +55,7 @@ from .const import (
     DEFAULT_ALERTS_FULL_INTERVAL,
     DEFAULT_ALERTS_LIMIT,
     DEFAULT_BOUNCER_IDLE_INTERVALS,
+    DEFAULT_NO_LINES_INTERVALS,
     DEFAULT_PARSE_ERROR_THRESHOLD,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
@@ -196,6 +198,9 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
         self.client = client
         self._rates = RateTracker()
         self._seen_traffic = False
+        # Cycles in a row without a single log line. One is not enough to call
+        # CrowdSec blind: a quiet home instance has those every few minutes.
+        self._no_lines_cycles = 0
         self._bouncer_idle_cycles = 0
         # Whether the last scrape had the counters per bouncer. ``None`` until
         # the first one — the cycle then plays it safe (see
@@ -217,6 +222,9 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
         )
         self._bouncer_idle_limit = int(
             options.get(CONF_BOUNCER_IDLE_INTERVALS, DEFAULT_BOUNCER_IDLE_INTERVALS)
+        )
+        self._no_lines_limit = int(
+            options.get(CONF_NO_LINES_INTERVALS, DEFAULT_NO_LINES_INTERVALS)
         )
         self._bouncers = BouncerTracker(self._bouncer_idle_limit)
         self._alerts_limit = int(options.get(CONF_ALERTS_LIMIT, DEFAULT_ALERTS_LIMIT))
@@ -772,7 +780,15 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
             return
 
         registry = dr.async_get(self.hass)
-        device = registry.async_get_device(identifiers={(DOMAIN, entry.entry_id)})
+        identifier = (DOMAIN, entry.entry_id)
+        # async_get_device is deprecated and stops working in Home Assistant
+        # 2027.8. Its successor does not exist in the older versions this
+        # integration still supports; the fallback goes once the minimum
+        # version in hacs.json has it.
+        if hasattr(registry, "async_get_device_by_identifier"):
+            device = registry.async_get_device_by_identifier(identifier, entry.entry_id)
+        else:
+            device = registry.async_get_device(identifiers={identifier})
         if device is None:
             # The entities have not been created yet — they will fill in the
             # version themselves anyway.
@@ -825,17 +841,23 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
                 )
             )
 
+        # A failed scrape (None) neither counts as silence nor breaks it — the
+        # failed query is a problem of its own.
         if data.lines_per_minute is not None:
             if data.lines_per_minute > 0:
                 self._seen_traffic = True
+                self._no_lines_cycles = 0
             elif self._seen_traffic:
-                problems.append(
-                    Problem(
-                        SEVERITY_ERROR,
-                        PROBLEM_NO_LOG_LINES,
-                        "No log lines processed any more — CrowdSec sees nothing",
+                self._no_lines_cycles += 1
+                if self._no_lines_cycles >= self._no_lines_limit:
+                    problems.append(
+                        Problem(
+                            SEVERITY_ERROR,
+                            PROBLEM_NO_LOG_LINES,
+                            f"No log lines processed for {self._no_lines_cycles} "
+                            "intervals — CrowdSec sees nothing",
+                        )
                     )
-                )
 
         problems.extend(self._bouncer_problems(data))
 

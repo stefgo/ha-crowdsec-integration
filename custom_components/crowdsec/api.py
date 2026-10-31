@@ -339,8 +339,18 @@ class CrowdSecClient:
     async def _async_alerts_window(
         self, window: Window, limit: int
     ) -> list[dict[str, Any]]:
-        """A single alert query over one time window."""
-        params = {**window_params(window), "limit": str(limit)}
+        """A single alert query over one time window.
+
+        ``include_capi=false`` keeps the CAPI and blocklist pulls out, which
+        would otherwise fill the limit with alerts nobody here acted on.
+        Versions that do not know the parameter ignore it; the alert cache
+        drops those alerts on this side either way.
+        """
+        params = {
+            **window_params(window),
+            "limit": str(limit),
+            "include_capi": "false",
+        }
         data = await self._async_lapi_request("GET", "/v1/alerts", params)
         if not data:
             return []

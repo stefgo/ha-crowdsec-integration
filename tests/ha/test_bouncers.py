@@ -381,9 +381,13 @@ async def test_no_log_lines_any_more_is_an_error(hass, config_entry, fake_client
         return MetricSet(parse_prometheus(text))
 
     fake_client.metrics_fn = metrics
-    coordinator = await setup(hass, config_entry, fake_client)
+    coordinator = await setup(hass, config_entry, fake_client, no_lines_intervals=2)
     lines["ok"] += 10
     await refresh(hass, coordinator)
+
+    # One quiet interval is tolerated, the second one is the problem.
+    data = await refresh(hass, coordinator)
+    assert "no-log-lines" not in problem_types(data)
 
     data = await refresh(hass, coordinator)
 
@@ -392,3 +396,61 @@ async def test_no_log_lines_any_more_is_an_error(hass, config_entry, fake_client
         next(p for p in data.problems if p["type"] == "no-log-lines")["severity"]
         == "error"
     )
+
+
+def _no_lines_problem(coordinator, lines_per_minute):
+    """Evaluate one cycle with the given rate; the no-lines problem or None."""
+    from custom_components.crowdsec.const import PROBLEM_NO_LOG_LINES
+    from custom_components.crowdsec.coordinator import CrowdSecData
+
+    data = CrowdSecData(reachable=True, lines_per_minute=lines_per_minute)
+    coordinator._evaluate_problem(data)
+    return next((p for p in data.problems if p["type"] == PROBLEM_NO_LOG_LINES), None)
+
+
+async def test_a_single_quiet_interval_is_not_a_problem(
+    hass, config_entry, fake_client
+):
+    """A home instance has minutes without a log line; that is not blindness."""
+    coordinator = await setup(hass, config_entry, fake_client, no_lines_intervals=3)
+
+    assert _no_lines_problem(coordinator, 1.0) is None
+    assert _no_lines_problem(coordinator, 0.0) is None
+    assert _no_lines_problem(coordinator, 0.0) is None
+    problem = _no_lines_problem(coordinator, 0.0)
+    assert problem is not None
+    assert problem["severity"] == "error"
+    assert "3 intervals" in problem["text"]
+
+
+async def test_log_lines_reset_the_quiet_count(hass, config_entry, fake_client):
+    coordinator = await setup(hass, config_entry, fake_client, no_lines_intervals=2)
+
+    assert _no_lines_problem(coordinator, 1.0) is None
+    assert _no_lines_problem(coordinator, 0.0) is None
+    assert _no_lines_problem(coordinator, 2.0) is None
+    assert _no_lines_problem(coordinator, 0.0) is None
+    assert _no_lines_problem(coordinator, 0.0) is not None
+    # Lines again end the problem at once.
+    assert _no_lines_problem(coordinator, 0.5) is None
+
+
+async def test_a_failed_scrape_neither_counts_nor_resets(
+    hass, config_entry, fake_client
+):
+    coordinator = await setup(hass, config_entry, fake_client, no_lines_intervals=2)
+
+    assert _no_lines_problem(coordinator, 1.0) is None
+    assert _no_lines_problem(coordinator, 0.0) is None
+    assert _no_lines_problem(coordinator, None) is None
+    assert _no_lines_problem(coordinator, 0.0) is not None
+
+
+async def test_no_lines_from_the_start_is_not_a_problem(
+    hass, config_entry, fake_client
+):
+    """An instance that never saw a line may simply have nothing to read yet."""
+    coordinator = await setup(hass, config_entry, fake_client, no_lines_intervals=1)
+
+    for _ in range(5):
+        assert _no_lines_problem(coordinator, 0.0) is None
