@@ -200,6 +200,22 @@ SENSORS: tuple[CrowdSecSensorDescription, ...] = (
         suggested_display_precision=1,
         value_fn=lambda data: data.bouncer_queries_per_minute,
     ),
+    CrowdSecSensorDescription(
+        key="active_bouncers",
+        translation_key="active_bouncers",
+        icon="mdi:shield-sync-outline",
+        state_class=SensorStateClass.MEASUREMENT,
+        # Unknown where CrowdSec only counts all bouncers together.
+        value_fn=lambda data: (
+            sum(1 for status in data.bouncers if status.active)
+            if data.per_bouncer
+            else None
+        ),
+        attrs_fn=lambda data: {
+            "total": len(data.bouncers) if data.per_bouncer else None,
+            "bouncers": [status.as_dict() for status in data.bouncers],
+        },
+    ),
 )
 
 

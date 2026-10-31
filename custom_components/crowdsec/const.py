@@ -146,6 +146,13 @@ METRIC_PARSER_OK = "cs_parser_hits_ok_total"
 METRIC_PARSER_KO = "cs_parser_hits_ko_total"
 METRIC_READER_HITS = "cs_reader_hits_total"
 METRIC_LAPI_ROUTE_REQUESTS = "cs_lapi_route_requests_total"
+# The same calls, counted per bouncer and per machine. Only requests made with a
+# bouncer key end up in the first one — the integration's own queries with the
+# machine token do not, which is what makes it the right source for "is a
+# bouncer still fetching decisions". CrowdSec leaves both out at
+# ``prometheus.level: aggregated``.
+METRIC_LAPI_BOUNCER_REQUESTS = "cs_lapi_bouncer_requests_total"
+METRIC_LAPI_MACHINE_REQUESTS = "cs_lapi_machine_requests_total"
 METRIC_LAPI_DECISIONS_OK = "cs_lapi_decisions_ok_total"
 METRIC_LAPI_DECISIONS_KO = "cs_lapi_decisions_ko_total"
 METRIC_PROCESS_START = "process_start_time_seconds"
@@ -159,3 +166,21 @@ COUNTER_LINES = "lines"
 COUNTER_PARSE_OK = "parse_ok"
 COUNTER_PARSE_KO = "parse_ko"
 COUNTER_BOUNCER = "bouncer_queries"
+# The integration's own requests to the decision routes, subtracted from
+# COUNTER_BOUNCER when only the summed metrics are there.
+COUNTER_OWN_DECISIONS = "own_decision_requests"
+
+# --- Bouncers -------------------------------------------------------------
+# Unique ID of a bouncer's binary sensor: f"{entry_id}{BOUNCER_UNIQUE_ID_INFIX}{name}".
+BOUNCER_UNIQUE_ID_INFIX = "_bouncer_"
+
+# --- Problems (attribute ``problems`` of the status sensor) ---------------
+SEVERITY_ERROR = "error"
+SEVERITY_WARNING = "warning"
+
+PROBLEM_UNREACHABLE = "unreachable"
+PROBLEM_QUERY_FAILED = "query-failed"
+PROBLEM_NO_LOG_LINES = "no-log-lines"
+PROBLEM_PARSE_ERRORS = "parse-errors"
+PROBLEM_BOUNCER_IDLE = "bouncer-idle"
+PROBLEM_NO_BOUNCER_QUERIES = "no-bouncer-queries"
