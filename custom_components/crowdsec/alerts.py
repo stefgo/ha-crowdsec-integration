@@ -13,9 +13,16 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from .const import REMOTE_ORIGINS
+
 # An alert without a usable source gets this key so that it does not disappear
 # under the empty string in the distributions.
 UNKNOWN = "unknown"
+
+# Source scopes of the alerts CrowdSec writes when it pulls a blocklist: one
+# per subscribed list ("lists:<name>") and one for the community blocklist.
+BLOCKLIST_SCOPE_PREFIX = "lists:"
+COMMUNITY_BLOCKLIST_SCOPE = "crowdsecurity/community-blocklist"
 
 
 def _text(value: Any) -> str | None:
@@ -82,6 +89,27 @@ def _source_field(alert: dict[str, Any], key: str) -> str | None:
     if not isinstance(source, dict):
         return None
     return _text(source.get(key))
+
+
+def is_remote_alert(alert: dict[str, Any]) -> bool:
+    """Whether an alert is a CAPI or blocklist pull rather than a detection.
+
+    Every pull of the community blocklist or a subscribed list is stored as one
+    alert ("update : +15000/-0 IPs") that carries all the decisions it brought.
+    Counted as bans, a single pull would outweigh everything the instance ever
+    detected. The decisions name their origin; a pull that brought no
+    decisions is recognised by its source scope instead.
+    """
+    for decision in alert.get("decisions") or []:
+        if not isinstance(decision, dict):
+            continue
+        origin = str(decision.get("origin") or "").strip().lower()
+        if origin in REMOTE_ORIGINS:
+            return True
+    scope = (_source_field(alert, "scope") or "").lower()
+    return scope.startswith(BLOCKLIST_SCOPE_PREFIX) or scope == (
+        COMMUNITY_BLOCKLIST_SCOPE
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -241,6 +269,11 @@ class AlertCache:
 
     Alerts are keyed by :func:`alert_id`, so the overlap the incremental
     queries deliberately have does not produce duplicates.
+
+    CAPI and blocklist pulls never enter the window (see
+    :func:`is_remote_alert`): every number derived from it — the 24h counts,
+    the top lists, the ban events — is about what this instance detected. The
+    LAPI is asked to leave them out as well, but not every version does.
     """
 
     def __init__(self, window: timedelta) -> None:
@@ -273,7 +306,7 @@ class AlertCache:
         """
         added = 0
         for alert in alerts:
-            if not isinstance(alert, dict):
+            if not isinstance(alert, dict) or is_remote_alert(alert):
                 continue
             key = alert_id(alert)
             if key is None:

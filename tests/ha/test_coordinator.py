@@ -240,6 +240,31 @@ async def test_a_new_ban_fires_exactly_one_event(hass, loaded_entry, fake_client
     assert len(events) == 1
 
 
+async def test_a_blocklist_pull_is_neither_counted_nor_reported(
+    hass, loaded_entry, fake_client
+):
+    """A pull carries thousands of decisions, but nobody here was banned."""
+    coordinator = loaded_entry.runtime_data
+    events = []
+    hass.bus.async_listen(EVENT_NEW_BAN, lambda event: events.append(event))
+    await refresh(hass, coordinator)
+
+    pull = make_alert(90, ip="", scenario="update : +15000/-0 IPs")
+    pull["source"]["scope"] = "crowdsecurity/community-blocklist"
+    pull["decisions"] = [
+        {"type": "ban", "duration": "24h", "value": f"198.51.100.{i}", "origin": "CAPI"}
+        for i in range(30)
+    ]
+    fake_client.alerts = [pull, make_alert(7, ip="192.0.2.7")]
+    data = await refresh(hass, coordinator)
+    await hass.async_block_till_done()
+
+    assert data.alerts_24h == 1
+    assert data.new_bans_24h == 1
+    assert data.top_scenario == "crowdsecurity/ssh-bf"
+    assert [event.data["ip"] for event in events] == ["192.0.2.7"]
+
+
 async def test_a_burst_is_capped_and_the_remainder_follows_later(
     hass, loaded_entry, fake_client
 ):

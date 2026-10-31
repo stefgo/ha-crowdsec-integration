@@ -41,5 +41,11 @@ was.
 
 ### Fixes
 
+- **`New bans 24h` and the Top sensors count only what this instance detected.**
+  Until now every blocklist and CAPI refresh was counted as well, so an instance with
+  subscribed blocklists showed tens of thousands of bans it never made, and
+  `Top scenario 24h` read `update : +15000/-0 IPs`. The same refreshes also fired a
+  `crowdsec_new_ban` event without an IP; that no longer happens. Expect the numbers
+  to drop sharply after the upgrade — they now match the ban table.
 - **Ready for Home Assistant 2027.8.** The integration no longer uses a device
   registry call that Home Assistant removes in 2027.8 and warns about until then.

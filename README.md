@@ -153,7 +153,7 @@ does.
 | Last update | sensor, timestamp | last scrape in which **no** query failed |
 | Last alert | sensor, timestamp | most recent alert of the last 24 h |
 | Active decisions | sensor | `cs_active_decisions` — counts every origin, including CAPI and blocklists |
-| New bans 24h | sensor | `/v1/alerts?since=24h` |
+| New bans 24h | sensor | ban decisions of the alerts from `/v1/alerts?since=24h` — local detections only; CAPI and blocklist pulls are left out |
 | Unique attackers 24h | sensor | distinct source IPs of the same alerts |
 | Top scenario 24h | sensor, text | most frequent scenario of the same alerts |
 | Top country 24h | sensor, text | `source.cn` of the same alerts |

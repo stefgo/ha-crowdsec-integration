@@ -123,3 +123,22 @@ def test_invalid_window_is_rejected():
 
     with pytest.raises(ValueError):
         asyncio.run(run())
+
+
+def test_the_lapi_is_asked_to_leave_capi_and_blocklists_out():
+    calls: list[dict] = []
+
+    async def run():
+        client = build_client()
+
+        async def fake_request(method, path, params=None, *args, **kwargs):
+            calls.append(params)
+            return [alert(1)]
+
+        client._async_lapi_request = fake_request  # type: ignore[assignment]
+        return await client.async_get_alerts(since="24h", limit=LIMIT)
+
+    result = asyncio.run(run())
+
+    assert len(result.alerts) == 1
+    assert calls and all(params["include_capi"] == "false" for params in calls)

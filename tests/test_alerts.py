@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-sys.path.insert(
-    0, str(Path(__file__).resolve().parents[1] / "custom_components" / "crowdsec")
-)
-
-from alerts import (
+# alerts.py imports const relatively — load it through the package registered
+# in conftest.py, not flat.
+from crowdsec_component.alerts import (
     UNKNOWN,
     alert_id,
+    is_remote_alert,
     new_bans,
     parse_timestamp,
     partition_bans,
@@ -264,3 +260,51 @@ def test_empty_input():
     assert summary.top_scenario is None
     assert summary.top_country is None
     assert summary.seen_ids == set()
+
+
+# -- CAPI and blocklist pulls -----------------------------------------------
+
+
+def pull_alert(origin="CAPI", scope="crowdsecurity/community-blocklist", count=3):
+    """The alert CrowdSec stores for one pull, carrying all its decisions."""
+    return {
+        "id": 900,
+        "created_at": "2026-08-13T10:00:00Z",
+        "scenario": f"update : +{count}/-0 IPs",
+        "source": {"scope": scope, "value": ""},
+        "decisions": [
+            {
+                "type": "ban",
+                "duration": "24h",
+                "scope": "Ip",
+                "value": f"198.51.100.{i}",
+                "origin": origin,
+            }
+            for i in range(count)
+        ],
+    }
+
+
+def test_a_capi_pull_is_remote():
+    assert is_remote_alert(pull_alert(origin="CAPI")) is True
+
+
+def test_a_blocklist_pull_is_remote():
+    assert is_remote_alert(pull_alert(origin="lists", scope="lists:firehol")) is True
+
+
+def test_a_pull_without_decisions_is_recognised_by_its_scope():
+    for scope in ("lists:firehol_cruzit", "crowdsecurity/community-blocklist"):
+        alert = pull_alert(scope=scope)
+        alert["decisions"] = []
+        assert is_remote_alert(alert) is True
+
+
+def test_a_local_detection_is_not_remote():
+    alert = make_alert()
+    alert["decisions"][0]["origin"] = "crowdsec"
+    assert is_remote_alert(alert) is False
+    # Decisions without an origin and alerts without any stay local too.
+    assert is_remote_alert(make_alert()) is False
+    assert is_remote_alert(make_alert(decisions=())) is False
+    assert is_remote_alert({"decisions": ["garbage"], "source": None}) is False
