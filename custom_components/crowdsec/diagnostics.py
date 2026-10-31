@@ -99,6 +99,8 @@ async def async_get_config_entry_diagnostics(
         for key, value in list(data.items()):
             if isinstance(value, datetime):
                 data[key] = value.isoformat()
+        # The same shape as in the attribute of "Active bouncers".
+        data["bouncers"] = [status.as_dict() for status in coordinator.data.bouncers]
         _redact_addresses(data)
 
     config = async_redact_data(dict(entry.data), TO_REDACT)

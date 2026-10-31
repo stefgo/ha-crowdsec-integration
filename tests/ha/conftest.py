@@ -9,6 +9,7 @@ cannot be faked usefully.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -127,6 +128,9 @@ class FakeClient:
         from custom_components.crowdsec.api import AlertResult
 
         self._metrics = metrics
+        # When set, every scrape is built anew — for counters that have to
+        # move the way CrowdSec's would, e.g. with the client's own requests.
+        self.metrics_fn: Callable[[], MetricSet] | None = None
         self.alerts: list[dict[str, Any]] = []
         self.decisions: list[dict[str, Any]] | None = []
         self.alerts_truncated = False
@@ -140,6 +144,9 @@ class FakeClient:
         # The real client sets this when a bouncer key would be the way
         # out of an unreadable decision list.
         self.decisions_need_bouncer_key = False
+        # Own requests to the decision routes, as the real client counts them.
+        self.decision_requests = 0
+        self.bouncer_decision_requests = 0
         # The lookup path is separate from the table: it goes to the LAPI
         # per request and ignores the configured scope.
         self.lookup_decisions: list[dict[str, Any]] | None = []
@@ -154,6 +161,8 @@ class FakeClient:
     async def async_get_metrics(self) -> MetricSet:
         if self.metrics_error:
             raise self.metrics_error
+        if self.metrics_fn is not None:
+            return self.metrics_fn()
         return self._metrics
 
     async def async_get_alerts(self, since: str = "24h", limit: int = 1000):
@@ -164,6 +173,7 @@ class FakeClient:
 
     async def async_get_decisions(self, origins=None):
         self.decision_queries.append(origins)
+        self.decision_requests += 1
         if self.decisions_error:
             raise self.decisions_error
         return None if self.decisions is None else list(self.decisions)

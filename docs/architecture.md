@@ -27,15 +27,17 @@ the coordinator or above.
 | Path | Responsibility |
 | --- | --- |
 | `api.py` | The only HTTP layer. Two endpoints per instance: the Prometheus `/metrics` endpoint and the LAPI (`/v1/watchers/login`, `/v1/alerts`, `/v1/decisions`). Holds the LAPI JWT and renews it before expiry. Raises `CrowdSecAuthError` carrying the `ENDPOINT_*` that rejected — only `ENDPOINT_LAPI` means bad credentials and triggers reauth. |
-| `coordinator.py` | A `DataUpdateCoordinator` producing one `CrowdSecData` dataclass per cycle. The three queries run through `asyncio.gather`, so their timeouts do not add up. Owns all cross-cycle state: `RateTracker` history, the `AlertCache`, seen alert IDs for ban events, the bouncer-idle counter, raw metrics for diagnostics. |
+| `coordinator.py` | A `DataUpdateCoordinator` producing one `CrowdSecData` dataclass per cycle. The three queries run through `asyncio.gather`, so their timeouts do not add up. Owns all cross-cycle state: `RateTracker` history, the `AlertCache`, seen alert IDs for ban events, the `BouncerTracker`, the `ProblemLog`, raw metrics for diagnostics. Reads the known and the ignored (disabled) bouncers off the entity registry at the start of every cycle. |
 | `metrics.py` | Prometheus text parser → `MetricSet`. HA-free. |
 | `rates.py` | Counter deltas per minute; discards the interval when `process_start_time_seconds` shows a restart. HA-free. |
+| `bouncers.py` | Decision requests per bouncer from `cs_lapi_bouncer_requests_total` → `BouncerTracker` → `BouncerStatus` (active, rate, last query, idle cycles). Keeps known bouncers across restarts of CrowdSec. HA-free. |
+| `problems.py` | `Problem` (severity, type, text, bouncer) and the `ProblemLog` that remembers `since` per problem. HA-free. |
 | `alerts.py` | Alert JSON → `AlertSummary`, ban detection, alert IDs, plus the rolling `AlertCache`. HA-free. |
 | `decisions.py` | Merges `/v1/decisions` with `/v1/alerts` into flat `DecisionRecord`s and parses Go durations. HA-free. |
 | `timewindow.py` | Window splitting arithmetic for the truncation fallback. HA-free. |
 | `validation.py` | Input checking (addresses, ban durations) shared by `services.py` and `websocket_api.py`. HA-free. |
 | `entity.py` | `CrowdSecEntity` — binds every entity to the config entry's device. |
-| `sensor.py`, `binary_sensor.py` | Description-driven platforms over `CrowdSecData`. |
+| `sensor.py`, `binary_sensor.py` | Description-driven platforms over `CrowdSecData`. The bouncer entities are added by a coordinator listener as bouncers turn up. |
 | `websocket_api.py` | `crowdsec/decisions/list\|delete`, `crowdsec/instances`, `crowdsec/ip/lookup\|ban`. The cards read from here rather than from entity attributes — a ban table would blow past attribute size limits and land in the recorder. Admin-only; deletes are restricted to local-origin decisions. |
 | `services.py`, `services.yaml` | `ban_ip`, `unban_ip`, `refresh`, all targeting a `config_entry_id`. |
 | `config_flow.py` | Setup, reauth, reconfigure, options. `build_unique_id()` is shared with `async_migrate_entry` in `__init__.py` (v1 → v2 added the machine ID). |
@@ -96,6 +98,29 @@ compares against to spot stale values.
 - **`/v1/decisions` returning 404 is normal** on some versions. Fallback chain:
   machine token → bouncer API key → the `cs_active_decisions` metric (count
   only, empty table).
+- **Bouncers are counted per bouncer, not via the route metric.**
+  `cs_lapi_route_requests_total` counts the integration's own `/v1/decisions`
+  query like a bouncer's, so the sum never fell to zero while Home Assistant
+  ran, and it hid one stopped bouncer behind another. `cs_lapi_bouncer_requests_total`
+  only sees requests made with a bouncer key. Whether CrowdSec counts per
+  client is read off that metric *or* `cs_lapi_machine_requests_total` — the
+  integration's own login puts the latter there every cycle, while the former
+  is missing until some bouncer has queried since the start.
+- **A known bouncer is never dropped for a missing counter.** Prometheus only
+  creates a label on its first request, so after a restart of CrowdSec the
+  broken bouncer is exactly the one without a counter. The entity registry is
+  the memory across restarts of Home Assistant; disabling an entity is the
+  way to ignore a bouncer, and a deleted entity forgets it.
+- **The summed fallback orders its queries.** At `prometheus.level:
+  aggregated` only the route sum exists, and the client counts its own decision
+  requests (`decision_requests`) to subtract them. That only works if each own
+  request lies clearly before or after a scrape, so in this mode the decision
+  query runs after the scrape instead of alongside it. Route sum and own count
+  are tracked as two counters — their difference could step backwards and make
+  `RateTracker` discard the whole interval.
+- **`problems` keys on type and bouncer, not on the text.** The texts carry
+  numbers that change every cycle; `since` must not start over because of that.
+  `reasons` keeps its old shape for existing automations.
 - **The user agent is fixed.** CrowdSec parses it as the machine's version and
   requires exactly `name/version`; Home Assistant's composite UA causes a 401 on
   login. Hence `USER_AGENT` in `const.py`.

@@ -14,6 +14,7 @@ from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
@@ -31,15 +32,23 @@ from .api import (
     CrowdSecClient,
     CrowdSecConnectionError,
 )
+from .bouncers import (
+    BouncerStatus,
+    BouncerTracker,
+    decision_requests_by_bouncer,
+    route_is_decisions,
+)
 from .const import (
     ALERTS_INCREMENT_OVERLAP_MINUTES,
     ALERTS_SINCE,
+    BOUNCER_UNIQUE_ID_INFIX,
     CONF_ALERTS_FULL_INTERVAL,
     CONF_ALERTS_LIMIT,
     CONF_BOUNCER_IDLE_INTERVALS,
     CONF_PARSE_ERROR_THRESHOLD,
     COUNTER_BOUNCER,
     COUNTER_LINES,
+    COUNTER_OWN_DECISIONS,
     COUNTER_PARSE_KO,
     COUNTER_PARSE_OK,
     DEFAULT_ALERTS_FULL_INTERVAL,
@@ -56,8 +65,10 @@ from .const import (
     METRIC_ACTIVE_DECISIONS,
     METRIC_BUCKETS,
     METRIC_INFO,
+    METRIC_LAPI_BOUNCER_REQUESTS,
     METRIC_LAPI_DECISIONS_KO,
     METRIC_LAPI_DECISIONS_OK,
+    METRIC_LAPI_MACHINE_REQUESTS,
     METRIC_LAPI_ROUTE_REQUESTS,
     METRIC_PARSER_HITS,
     METRIC_PARSER_KO,
@@ -65,17 +76,23 @@ from .const import (
     METRIC_PREFIX,
     METRIC_PROCESS_START,
     METRIC_READER_HITS,
+    PROBLEM_BOUNCER_IDLE,
+    PROBLEM_NO_BOUNCER_QUERIES,
+    PROBLEM_NO_LOG_LINES,
+    PROBLEM_PARSE_ERRORS,
+    PROBLEM_QUERY_FAILED,
+    PROBLEM_UNREACHABLE,
+    SEVERITY_ERROR,
+    SEVERITY_WARNING,
     TOP_SCENARIO_COUNT,
 )
 from .decisions import DecisionRecord, build_table
-from .metrics import MetricSet, Sample
+from .metrics import MetricSet
+from .problems import Problem, ProblemLog
 from .rates import RateTracker, error_ratio
 from .timewindow import parse_duration
 
 _LOGGER = logging.getLogger(__name__)
-
-# Label names under which CrowdSec stores the LAPI route, depending on version.
-ROUTE_LABELS = ("endpoint", "route", "path")
 
 # More ban events per cycle point to a catch-up (the instance was away for a
 # long time, the alert window fills up all at once). In that case a single
@@ -96,6 +113,8 @@ class CrowdSecData:
     errors: list[str] = field(default_factory=list)
     problem: bool = False
     problem_reasons: list[str] = field(default_factory=list)
+    # The same reasons with severity, type and start time (see problems.py).
+    problems: list[dict[str, Any]] = field(default_factory=list)
 
     # One flag per query. Every value below belongs to exactly one of them, and
     # an entity goes unavailable when *its* source failed — not when any of the
@@ -146,16 +165,14 @@ class CrowdSecData:
     parse_error_rate: float | None = None
     bouncer_queries_per_minute: float | None = None
 
+    # Whether CrowdSec counts the requests per bouncer. Without that (at
+    # ``prometheus.level: aggregated``) only the sum is known and ``bouncers``
+    # stays empty.
+    per_bouncer: bool = False
+    # The known bouncers without the ignored ones, sorted by name.
+    bouncers: list[BouncerStatus] = field(default_factory=list)
+
     version: str | None = None
-
-
-def _route_is_decisions(sample: Sample) -> bool:
-    """Does the sample hit one of the decision routes of the LAPI?"""
-    for label in ROUTE_LABELS:
-        value = sample.labels.get(label)
-        if value and value.startswith("/v1/decisions"):
-            return True
-    return False
 
 
 class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
@@ -180,6 +197,12 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
         self._rates = RateTracker()
         self._seen_traffic = False
         self._bouncer_idle_cycles = 0
+        # Whether the last scrape had the counters per bouncer. ``None`` until
+        # the first one — the cycle then plays it safe (see
+        # _async_query_metrics_and_decisions).
+        self._per_bouncer: bool | None = None
+        self._ignored_bouncers: set[str] = set()
+        self._problem_log = ProblemLog()
         # Identifiers of the most recently seen alerts. ``None`` means
         # "nothing seen yet" — then no ban events are fired.
         self._known_alert_ids: set[str] | None = None
@@ -195,6 +218,7 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
         self._bouncer_idle_limit = int(
             options.get(CONF_BOUNCER_IDLE_INTERVALS, DEFAULT_BOUNCER_IDLE_INTERVALS)
         )
+        self._bouncers = BouncerTracker(self._bouncer_idle_limit)
         self._alerts_limit = int(options.get(CONF_ALERTS_LIMIT, DEFAULT_ALERTS_LIMIT))
         self._alerts_full_interval = int(
             options.get(CONF_ALERTS_FULL_INTERVAL, DEFAULT_ALERTS_FULL_INTERVAL)
@@ -235,14 +259,19 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
         previous = self.data
         data = CrowdSecData()
 
+        self._sync_bouncer_registry()
+
         # The three queries do not depend on each other. Run one after another,
         # three timeouts add up in the worst case — in parallel the cycle stays
         # within a single one.
         full_alerts = self._alerts_due_in_full(started)
-        metrics_result, alerts_result, decisions_result = await asyncio.gather(
-            self.client.async_get_metrics(),
+        (
+            (metrics_result, own_requests, decisions_result),
+            alerts_result,
+        ) = await asyncio.gather(
+            # Never raises: its exceptions come back as results.
+            self._async_query_metrics_and_decisions(),
             self._async_query_alerts(started, full_alerts),
-            self.client.async_get_decisions(self.decisions_origins),
             return_exceptions=True,
         )
 
@@ -258,10 +287,17 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
 
         if metrics is not None:
             self.raw_metrics = metrics.as_dict(METRIC_PREFIX)
-            self._apply_metrics(data, metrics)
+            self._apply_metrics(data, metrics, own_requests)
         else:
             # Without fresh counters every rate comparison is worthless.
             self._rates.reset()
+            self._bouncers.reset()
+            # What is known about the bouncers stays, so a stopped one is not
+            # dropped from the problems just because one scrape failed. Their
+            # entities go unavailable all the same: their source is down.
+            data.per_bouncer = bool(self._per_bouncer)
+            if data.per_bouncer:
+                data.bouncers = self._bouncers.statuses(self._ignored_bouncers)
 
         if alerts is not None:
             self._absorb_alerts(alerts, full_alerts, started)
@@ -303,6 +339,69 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
         self._report_missing_bouncer_key()
         return data
 
+    async def _async_query_metrics_and_decisions(
+        self,
+    ) -> tuple[Any, tuple[int, int], Any]:
+        """Scrape the metrics and fetch the decision list.
+
+        Normally both run side by side. Where CrowdSec only counts the
+        requests of all bouncers together, the integration's own decision
+        query is part of that sum and has to be subtracted — which only works
+        if it is clear on which side of the scrape it landed. Then the
+        decision query follows the scrape, and the own requests are read in
+        between.
+
+        Exceptions come back as results, as with ``asyncio.gather``.
+        """
+        decisions = self.client.async_get_decisions(self.decisions_origins)
+        if self._per_bouncer:
+            metrics, result = await asyncio.gather(
+                self.client.async_get_metrics(), decisions, return_exceptions=True
+            )
+            return metrics, self._own_decision_requests(), result
+
+        (metrics,) = await asyncio.gather(
+            self.client.async_get_metrics(), return_exceptions=True
+        )
+        own = self._own_decision_requests()
+        (result,) = await asyncio.gather(decisions, return_exceptions=True)
+        return metrics, own, result
+
+    def _own_decision_requests(self) -> tuple[int, int]:
+        """All own requests to the decision routes, and those with the key."""
+        return (
+            self.client.decision_requests,
+            self.client.bouncer_decision_requests,
+        )
+
+    def _sync_bouncer_registry(self) -> None:
+        """Read the known and the ignored bouncers off the entity registry.
+
+        Every bouncer has a binary sensor. Its registry entry is what keeps the
+        bouncer known across restarts, and disabling it is how a bouncer is
+        ignored — no option of its own needed.
+        """
+        entry = self.config_entry
+        if entry is None:
+            return
+        prefix = f"{entry.entry_id}{BOUNCER_UNIQUE_ID_INFIX}"
+        names: set[str] = set()
+        ignored: set[str] = set()
+        registry = er.async_get(self.hass)
+        for item in er.async_entries_for_config_entry(registry, entry.entry_id):
+            if item.domain != "binary_sensor" or not item.unique_id.startswith(prefix):
+                continue
+            name = item.unique_id[len(prefix) :]
+            names.add(name)
+            if item.disabled_by is not None:
+                ignored.add(name)
+        self._bouncers.sync_registry(names)
+        self._ignored_bouncers = ignored
+
+    def bouncer_entity_added(self, name: str) -> None:
+        """A bouncer's entity was added — it is in the registry from now on."""
+        self._bouncers.mark_registered(name)
+
     def _unwrap(self, data: CrowdSecData, result: Any, expected: type) -> Any | None:
         """Evaluate one result from ``asyncio.gather``.
 
@@ -336,7 +435,9 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
 
     # -- Evaluation -------------------------------------------------------
 
-    def _apply_metrics(self, data: CrowdSecData, metrics: MetricSet) -> None:
+    def _apply_metrics(
+        self, data: CrowdSecData, metrics: MetricSet, own_requests: tuple[int, int]
+    ) -> None:
         data.version = metrics.label_of(METRIC_INFO, "version")
 
         start_time = metrics.single(METRIC_PROCESS_START)
@@ -371,12 +472,6 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
             lines = (parse_ok or 0.0) + (parse_ko or 0.0)
         data.lines_total = lines
 
-        bouncer = metrics.total(METRIC_LAPI_ROUTE_REQUESTS, _route_is_decisions)
-        if bouncer is None:
-            ok = metrics.total(METRIC_LAPI_DECISIONS_OK) or 0.0
-            ko = metrics.total(METRIC_LAPI_DECISIONS_KO)
-            bouncer = ok + ko if ko is not None else None
-
         counters: dict[str, float] = {}
         if lines is not None:
             counters[COUNTER_LINES] = lines
@@ -384,8 +479,32 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
             counters[COUNTER_PARSE_OK] = parse_ok
         if parse_ko is not None:
             counters[COUNTER_PARSE_KO] = parse_ko
-        if bouncer is not None:
-            counters[COUNTER_BOUNCER] = bouncer
+
+        # The integration logs in as a machine every cycle, so the machine
+        # counter is there whenever CrowdSec counts per client at all — even
+        # right after a restart, before any bouncer has asked for anything.
+        per_bouncer = (
+            METRIC_LAPI_BOUNCER_REQUESTS in metrics
+            or METRIC_LAPI_MACHINE_REQUESTS in metrics
+        )
+        self._per_bouncer = per_bouncer
+        data.per_bouncer = per_bouncer
+        bouncers_evaluated = False
+        if per_bouncer:
+            bouncers_evaluated = self._bouncers.update(
+                decision_requests_by_bouncer(metrics, METRIC_LAPI_BOUNCER_REQUESTS),
+                start_time,
+                monotonic(),
+                datetime.now(UTC),
+            )
+            data.bouncers = self._bouncers.statuses(self._ignored_bouncers)
+            if bouncers_evaluated:
+                data.bouncer_queries_per_minute = sum(
+                    status.queries_per_minute or 0.0 for status in data.bouncers
+                )
+        else:
+            self._bouncers.reset()
+            self._add_summed_bouncer_counters(counters, metrics, own_requests)
 
         window = self._rates.update(counters, start_time, monotonic())
         if window is None:
@@ -394,7 +513,13 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
             return
 
         data.lines_per_minute = window.per_minute(COUNTER_LINES)
-        data.bouncer_queries_per_minute = window.per_minute(COUNTER_BOUNCER)
+        if not per_bouncer:
+            requests = window.deltas.get(COUNTER_BOUNCER)
+            if requests is not None and window.elapsed > 0:
+                own = window.deltas.get(COUNTER_OWN_DECISIONS, 0.0)
+                data.bouncer_queries_per_minute = (
+                    max(0.0, requests - own) / window.elapsed * 60.0
+                )
 
         interval_rate = error_ratio(
             window.deltas.get(COUNTER_PARSE_OK), window.deltas.get(COUNTER_PARSE_KO)
@@ -406,6 +531,33 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
             if interval_rate is not None
             else error_ratio(parse_ok, parse_ko)
         )
+
+    def _add_summed_bouncer_counters(
+        self,
+        counters: dict[str, float],
+        metrics: MetricSet,
+        own_requests: tuple[int, int],
+    ) -> None:
+        """The fallback without counters per bouncer: one sum for all.
+
+        The sum contains the integration's own decision queries, so their
+        count goes along and is subtracted from the increase. Both are kept as
+        counters of their own — their difference could step backwards and
+        make the rate tracker throw the whole interval away.
+        """
+        own_all, own_with_key = own_requests
+        routes = metrics.total(METRIC_LAPI_ROUTE_REQUESTS, route_is_decisions)
+        if routes is not None:
+            counters[COUNTER_BOUNCER] = routes
+            counters[COUNTER_OWN_DECISIONS] = float(own_all)
+            return
+        # Older still: only the ok/ko counters of the decision route, which see
+        # nothing but requests made with a bouncer key.
+        ok = metrics.total(METRIC_LAPI_DECISIONS_OK) or 0.0
+        ko = metrics.total(METRIC_LAPI_DECISIONS_KO)
+        if ko is not None:
+            counters[COUNTER_BOUNCER] = ok + ko
+            counters[COUNTER_OWN_DECISIONS] = float(own_with_key)
 
     # -- Alerts -----------------------------------------------------------
 
@@ -631,45 +783,113 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
         self._device_version = data.version
 
     def _evaluate_problem(self, data: CrowdSecData) -> None:
-        """Set the aggregate flag for automations."""
-        reasons: list[str] = []
+        """Set the aggregate flag for automations.
+
+        Every problem goes into ``problems`` with its severity and into
+        ``problem_reasons`` as text — the latter unchanged in shape, so the
+        automations built on it keep working.
+        """
+        problems: list[Problem] = []
 
         # Unconditionally: now that ``reachable`` only says the instance
         # answered at all, this flag is the one place a partial outage still
         # surfaces. Tying it to ``reachable`` would let a permanently broken
         # alert route pass unnoticed as long as the metrics kept coming.
-        reasons.extend(data.errors)
+        if not data.reachable:
+            detail = "; ".join(data.errors)
+            problems.append(
+                Problem(
+                    SEVERITY_ERROR,
+                    PROBLEM_UNREACHABLE,
+                    f"Instance not reachable: {detail}"
+                    if detail
+                    else "Instance not reachable",
+                )
+            )
+        else:
+            problems.extend(
+                Problem(SEVERITY_WARNING, PROBLEM_QUERY_FAILED, error)
+                for error in data.errors
+            )
 
         if (
             data.parse_error_rate is not None
             and data.parse_error_rate > self._parse_threshold
         ):
-            reasons.append(
-                f"Parse error rate {data.parse_error_rate:.1f} % above threshold "
-                f"{self._parse_threshold:.1f} %"
+            problems.append(
+                Problem(
+                    SEVERITY_WARNING,
+                    PROBLEM_PARSE_ERRORS,
+                    f"Parse error rate {data.parse_error_rate:.1f} % above "
+                    f"threshold {self._parse_threshold:.1f} %",
+                )
             )
 
         if data.lines_per_minute is not None:
             if data.lines_per_minute > 0:
                 self._seen_traffic = True
             elif self._seen_traffic:
-                reasons.append(
-                    "No log lines processed any more — CrowdSec sees nothing"
+                problems.append(
+                    Problem(
+                        SEVERITY_ERROR,
+                        PROBLEM_NO_LOG_LINES,
+                        "No log lines processed any more — CrowdSec sees nothing",
+                    )
                 )
 
+        problems.extend(self._bouncer_problems(data))
+
+        # The texts as before: the individual errors first, not one sentence
+        # summing them up.
+        reasons = [*data.errors] + [
+            problem.text
+            for problem in problems
+            if problem.type not in (PROBLEM_UNREACHABLE, PROBLEM_QUERY_FAILED)
+        ]
+        if not data.reachable and not data.errors:
+            reasons.insert(0, problems[0].text)
+
+        data.problems = self._problem_log.update(problems, datetime.now(UTC))
+        data.problem_reasons = reasons
+        data.problem = bool(problems)
+
+    def _bouncer_problems(self, data: CrowdSecData) -> list[Problem]:
+        """A stopped bouncer, or no bouncer queries at all.
+
+        Per bouncer where CrowdSec counts per bouncer. The sum over all of them
+        only decides where it does not, or when no bouncer is known — then
+        nobody is enforcing anything. Bouncers that are known but all ignored
+        are a choice, not a problem.
+        """
         if data.bouncer_queries_per_minute is not None:
             if data.bouncer_queries_per_minute > 0:
                 self._bouncer_idle_cycles = 0
             else:
                 self._bouncer_idle_cycles += 1
-                if self._bouncer_idle_cycles >= self._bouncer_idle_limit:
-                    reasons.append(
-                        f"No bouncer queries for {self._bouncer_idle_cycles} "
-                        "intervals — decisions are not being enforced"
-                    )
 
-        data.problem_reasons = reasons
-        data.problem = bool(reasons)
+        if data.per_bouncer and self._bouncers.names:
+            return [
+                Problem(
+                    SEVERITY_ERROR,
+                    PROBLEM_BOUNCER_IDLE,
+                    f"Bouncer {status.name}: no queries for {status.idle_cycles} "
+                    "intervals — its decisions are not being enforced",
+                    bouncer=status.name,
+                )
+                for status in data.bouncers
+                if status.active is False
+            ]
+
+        if self._bouncer_idle_cycles >= self._bouncer_idle_limit:
+            return [
+                Problem(
+                    SEVERITY_ERROR,
+                    PROBLEM_NO_BOUNCER_QUERIES,
+                    f"No bouncer queries for {self._bouncer_idle_cycles} "
+                    "intervals — decisions are not being enforced",
+                )
+            ]
+        return []
 
 
 # Typed entry: the coordinator lives in entry.runtime_data.

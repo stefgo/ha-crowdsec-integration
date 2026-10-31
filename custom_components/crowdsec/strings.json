@@ -178,7 +178,8 @@
   "entity": {
     "binary_sensor": {
       "reachable": { "name": "Reachable" },
-      "problem": { "name": "Status" }
+      "problem": { "name": "Status" },
+      "bouncer": { "name": "Bouncer {name}" }
     },
     "sensor": {
       "scrape_duration": { "name": "Scrape duration" },
@@ -195,7 +196,8 @@
       "lines_total": { "name": "Lines processed" },
       "lines_per_minute": { "name": "Lines per minute" },
       "parse_error_rate": { "name": "Parse error rate" },
-      "bouncer_queries_per_minute": { "name": "Bouncer queries per minute" }
+      "bouncer_queries_per_minute": { "name": "Bouncer queries per minute" },
+      "active_bouncers": { "name": "Active bouncers" }
     }
   }
 }

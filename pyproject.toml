@@ -41,8 +41,10 @@ follow_imports = "silent"
 # framework into the type check for very little gain.
 files = [
     "custom_components/crowdsec/alerts.py",
+    "custom_components/crowdsec/bouncers.py",
     "custom_components/crowdsec/decisions.py",
     "custom_components/crowdsec/metrics.py",
+    "custom_components/crowdsec/problems.py",
     "custom_components/crowdsec/rates.py",
     "custom_components/crowdsec/timewindow.py",
     "custom_components/crowdsec/validation.py",

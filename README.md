@@ -72,7 +72,9 @@ On the CrowdSec side, three things:
    fallback for CrowdSec versions that serve `/v1/decisions` to bouncers alone;
    if neither path works, the card's table stays empty. The `Active decisions`
    sensor is not affected either way — it always reads the
-   `cs_active_decisions` metric.
+   `cs_active_decisions` metric. Should the integration ever query with the
+   key, `homeassistant` shows up as a bouncer of its own; disable its entity
+   (see [Bouncers](#bouncers)).
 
 ## Installation
 
@@ -110,10 +112,10 @@ changed while it runs.
 
 | Option | Default | What it does |
 | --- | --- | --- |
-| Polling interval | 60 s | How often a cycle runs. The three queries of a cycle run in parallel, so their timeouts do not add up. |
+| Polling interval | 60 s | How often a cycle runs. The three queries of a cycle run in parallel, so their timeouts do not add up — except where CrowdSec does not count requests per bouncer: the decision query then follows the metrics scrape (see [Bouncers](#bouncers)). |
 | Request timeout | 15 s | Applies **per request**. Must be lower than the polling interval, otherwise cycles would overlap. For an instance behind a VPN or a slow proxy a higher value helps. |
 | Parse error threshold | 5 % | Above this, `Status` turns on — the log format no longer matches the parser. |
-| Intervals without bouncer queries before a problem | 5 | How many cycles without a single bouncer query are tolerated before `Status` turns on. |
+| Intervals without bouncer queries before a problem | 5 | How many cycles in a row a bouncer may go without fetching decisions before it counts as stopped and `Status` turns on. Applies to each bouncer on its own. |
 | Alerts per query (24h) | 1000 | Size of a single alert query. If it is hit, the time window is split and queried again, so the 24h numbers stay complete. Very high values slow down every cycle. |
 | Full alert refresh | 300 s | How often the whole 24h window is refetched. Must not be shorter than the polling interval. See below. |
 
@@ -155,13 +157,16 @@ does.
 | Lines processed | sensor (diagnostic) | `cs_parser_hits_total`, cumulative |
 | Lines per minute | sensor | rate from `cs_parser_hits_total` |
 | Parse error rate | sensor, % | `cs_parser_hits_ko_total` / (ok + ko) |
-| Bouncer queries per minute | sensor | rate from `cs_lapi_route_requests_total` |
+| Bouncer queries per minute | sensor | decision requests of all bouncers, from `cs_lapi_bouncer_requests_total` — without the integration's own queries |
+| Active bouncers | sensor | bouncers that fetched decisions within the last N intervals, [see below](#bouncers) |
+| Bouncer *name* | `binary_sensor` (running), one per bouncer | on while the bouncer fetches decisions, off once it stopped |
 
 Useful attributes: `Active decisions` carries `by_reason`/`by_action`,
 `Top scenario 24h` the top 5 as `top_scenarios`, `Top country 24h` the
 `top_countries`, `Unique attackers 24h` the `top_attackers` together with their
-alert count, `Active buckets` the open buckets per scenario, and `Status` the
-triggering `reasons`.
+alert count, `Active buckets` the open buckets per scenario, `Active bouncers` the
+`bouncers` with their state and `total`, and `Status` the triggering `reasons`
+and `problems`.
 
 `Lines processed` is deliberately `total_increasing`: the counter runs since
 the start of the service and is reset on a restart — Home Assistant absorbs
@@ -403,14 +408,38 @@ To adjust before use: the service name of the companion app in the notify group
 
 ### When "Status" turns on
 
-* the instance is unreachable
-* the parse error rate is above the threshold — the log format no longer
-  matches the parser
-* no log lines are processed any more although there were some before —
-  CrowdSec is blind
-* no bouncer queries for N intervals — decisions are not being enforced
+| `type` | `severity` | When |
+| --- | --- | --- |
+| `unreachable` | error | none of the three queries came through |
+| `query-failed` | warning | one or two of the queries failed — the text is the error |
+| `no-log-lines` | error | no log lines are processed any more although there were some before — CrowdSec is blind |
+| `parse-errors` | warning | the parse error rate is above the threshold — the log format no longer matches the parser |
+| `bouncer-idle` | error | a bouncer has not fetched decisions for N intervals — its decisions are not being enforced. One entry per bouncer, with its name in `bouncer` |
+| `no-bouncer-queries` | error | no bouncer is known and none fetches decisions, or CrowdSec only counts them all together and the sum stays at zero |
 
-The reason is in the `reasons` attribute:
+The reasons are in two attributes. `reasons` lists them as text. `problems`
+lists the same problems with their severity, a fixed type and the time they
+first appeared, errors first:
+
+```yaml
+problems:
+  - severity: error
+    type: bouncer-idle
+    text: "Bouncer traefik: no queries for 5 intervals — its decisions are not being enforced"
+    since: "2026-10-31T21:14:03+00:00"
+    bouncer: traefik
+```
+
+`since` starts over when a problem goes away and comes back, and after a
+restart of Home Assistant. A template that only cares about errors filters on
+the severity instead of the wording:
+
+```jinja
+{{ state_attr('binary_sensor.crowdsec_edge_status', 'problems')
+   | selectattr('severity', 'eq', 'error') | list | count }}
+```
+
+An automation on the text:
 
 ```yaml
 automation:
@@ -427,6 +456,41 @@ automation:
             CrowdSec: {{ state_attr('binary_sensor.crowdsec_edge_status', 'reasons') | join(', ') }}
 ```
 
+### Bouncers
+
+CrowdSec decides what to block; a bouncer — a firewall, a reverse proxy plugin
+— fetches those decisions and enforces them. If a bouncer stops, detection
+carries on and nothing is blocked any more, which is invisible from the
+outside. Each bouncer therefore gets an entity of its own, `Bouncer <name>`:
+
+* **on** while it fetches decisions, **off** once it has not done so for N
+  intervals in a row (the option above), **unknown** until either is clear —
+  right after a start of Home Assistant, for instance.
+* Attributes: `queries_per_minute`, `last_query`, `idle_intervals`.
+* A bouncer appears by itself the first time it fetches decisions. It stays
+  known after that, also across restarts: after a restart of CrowdSec a
+  bouncer that does not query any more is missing from the metrics altogether,
+  and it must go off rather than vanish.
+* **To ignore a bouncer, disable its entity.** It then counts neither for
+  `Status` nor for `Active bouncers`. That is the way for a bouncer that is
+  gone for good, or for the integration's own key. A disabled entity can be
+  deleted; Home Assistant remembers it, so if the bouncer queries again its
+  entity comes back disabled.
+
+The source is `cs_lapi_bouncer_requests_total`, which only counts requests made
+with a bouncer key. Only the decision routes count (`/v1/decisions` and
+`/v1/decisions/stream`), not `/v1/usage-metrics`.
+
+A bouncer in *live* mode asks for every incoming request and nothing when
+nobody visits — at night it may go off without being broken. Use *stream* mode
+where the bouncer offers it, or disable the entity.
+
+With `prometheus.level: aggregated` CrowdSec only counts the requests of all
+clients together. Then there are no entities per bouncer, `Active bouncers` is
+unknown, and `Bouncer queries per minute` is the sum minus the integration's
+own decision queries. To keep that subtraction exact, the decision query then
+runs after the metrics scrape instead of alongside it.
+
 ### Behaviour during an outage
 
 If a query fails, the measured values that come from it go `unavailable` — they
@@ -440,6 +504,9 @@ endpoint answers, `New bans (24 h)` and the three `Top …` sensors go
 metrics-derived values keep updating. `Reachable` stays on as long as the
 instance answers anywhere; that a route is stuck is reported by `Status`, whose
 `reasons` attribute names it.
+
+The bouncer entities follow the metrics scrape like the other values. What is
+known about a bouncer is kept meanwhile, so a stopped one stays in `problems`.
 
 After a restart of the instance the rate sensors are suspended for one interval
 instead of reporting a negative jump from reset counters. `Last restart` then

@@ -14,6 +14,7 @@ from typing import Any, NamedTuple
 import aiohttp
 
 from .alerts import alert_id
+from .bouncers import DECISIONS_ROUTE
 from .const import (
     ALERTS_SINCE,
     DECISION_ORIGIN,
@@ -153,6 +154,13 @@ class CrowdSecClient:
         # the way out. The coordinator turns it into a repair issue — this
         # module stays free of Home Assistant imports.
         self.decisions_need_bouncer_key = False
+        # The integration's own requests to the decision routes. CrowdSec
+        # counts them in ``cs_lapi_route_requests_total`` like any bouncer's;
+        # where that metric is all there is, the coordinator subtracts these.
+        # The second counter holds the ones made with the bouncer key, which
+        # also land in ``cs_lapi_decisions_ok/ko_total``.
+        self.decision_requests = 0
+        self.bouncer_decision_requests = 0
 
     @property
     def has_bouncer_key(self) -> bool:
@@ -290,6 +298,8 @@ class CrowdSecClient:
         """
         for attempt in range(2):
             token = await self._async_token(force=attempt > 0)
+            if path.startswith(DECISIONS_ROUTE):
+                self.decision_requests += 1
             try:
                 async with self._session.request(
                     method,
@@ -563,6 +573,8 @@ class CrowdSecClient:
         """The decision list via the bouncer API."""
         if self._bouncer_api_key is None:
             return None
+        self.decision_requests += 1
+        self.bouncer_decision_requests += 1
         try:
             async with self._session.get(
                 f"{self._lapi_url}/v1/decisions",
