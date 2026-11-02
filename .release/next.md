@@ -17,7 +17,7 @@ Nothing inside an HTML comment is published.
   CrowdSec always refuses, and logged in again on every poll before falling
   back to the bouncer key. It now asks with the bouncer key straight away; the
   log stays clean and the needless login is gone.
-- **Removing all decisions for an address works again.** CrowdSec refused the
+- **Removing all decisions for an address works.** CrowdSec refused the
   request behind the `crowdsec.unban_ip` service and behind *Remove all
   decisions for …* in both cards, so nothing was removed. The service now
   removes every decision for the address, as documented. The cards remove only
