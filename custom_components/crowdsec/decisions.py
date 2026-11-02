@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from .alerts import alert_timestamp, parse_timestamp, source_value
+from .alerts import FETCHED_AT, alert_timestamp, parse_timestamp, source_value
 from .const import (
     DECISION_STATUS_ACTIVE,
     DECISION_STATUS_EXPIRED,
@@ -327,6 +327,12 @@ def history_from_alerts(
     The active decisions are passed in so their addresses can be skipped: a ban
     that is still running is already in the table with live data, and a second
     row from the alert history would only duplicate it.
+
+    The ``duration`` of an alert's decision is the time that was left when the
+    alert was fetched — negative once the ban is over — not the length of the
+    ban. The expiry is therefore counted from the fetch time the alert cache
+    stored (:data:`~.alerts.FETCHED_AT`), and from ``now`` for an alert that
+    comes straight from the LAPI.
     """
     covered = {record.value for record in active if record.value}
     history: list[DecisionRecord] = []
@@ -337,6 +343,7 @@ def history_from_alerts(
             continue
 
         created = alert_timestamp(alert)
+        fetched = parse_timestamp(alert.get(FETCHED_AT)) or now
         country = _source_field(alert, "cn")
         as_name = _source_field(alert, "as_name")
         as_number = _source_field(alert, "as_number")
@@ -352,9 +359,7 @@ def history_from_alerts(
             duration = _text(decision.get("duration"))
             seconds = parse_go_duration(duration)
             until = (
-                created + timedelta(seconds=seconds)
-                if (created is not None and seconds is not None)
-                else None
+                fetched + timedelta(seconds=seconds) if seconds is not None else None
             )
             if until is not None and until > now:
                 # Still running, but not in the decision list — the LAPI query

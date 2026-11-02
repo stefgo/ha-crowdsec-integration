@@ -77,6 +77,11 @@ compares against to spot stale values.
   the evaluation is unchanged. `alerts_truncated` is remembered rather than
   recomputed: a truncated increment means alerts were missed, and only a full
   query can clear it.
+- **An alert's decision `duration` is the time left, not the ban length.**
+  CrowdSec computes it as `until - now` at the moment of the query, negative
+  once the ban is over. The cache stamps every alert with its fetch time
+  (`alerts.FETCHED_AT`), and `history_from_alerts` counts the expiry from
+  there. Counting it from `created_at` put expired bans hours too early.
 - **No LAPI pagination.** `/v1/alerts` silently truncates at `limit`. The client
   halves the window and re-queries, up to `MAX_WINDOW_SPLITS` (4) levels deep;
   still truncated means a repair issue and `alerts_truncated`.

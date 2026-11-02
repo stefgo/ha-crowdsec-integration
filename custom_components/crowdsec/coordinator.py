@@ -595,22 +595,23 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
 
     def _absorb_alerts(self, result: AlertResult, full: bool, now: float) -> None:
         """Merge the result of a query into the rolling window."""
+        fetched_at = datetime.now(UTC)
         if full:
-            self._alert_cache.replace(result.alerts)
+            self._alert_cache.replace(result.alerts, fetched_at)
             self._alerts_full_at = now
             self._force_full_alerts = False
             # A full query re-establishes the truth about completeness; an
             # earlier incremental truncation is no longer relevant.
             self._alerts_truncated = result.truncated
         else:
-            self._alert_cache.add(result.alerts)
+            self._alert_cache.add(result.alerts, fetched_at)
             # A truncated increment means alerts were missed, and the cache
             # cannot heal that by itself — the flag stays until the next full
             # query proves otherwise.
             self._alerts_truncated = self._alerts_truncated or result.truncated
 
         self._alerts_polled_at = now
-        self._alert_cache.prune(datetime.now(UTC))
+        self._alert_cache.prune(fetched_at)
 
     def _apply_alerts(self, data: CrowdSecData) -> None:
         """Derive the 24h numbers from the rolling window."""

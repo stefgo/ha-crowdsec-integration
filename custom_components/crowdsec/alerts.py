@@ -19,6 +19,13 @@ from .const import REMOTE_ORIGINS
 # under the empty string in the distributions.
 UNKNOWN = "unknown"
 
+# Added to every alert the cache keeps: when it was fetched. CrowdSec reports
+# the ``duration`` of an alert's decisions as the time left *at the moment of
+# the query*, not as the length of the ban, so the expiry is only known
+# relative to that moment. The leading underscore keeps it apart from the
+# fields of the LAPI.
+FETCHED_AT = "_fetched_at"
+
 # Source scopes of the alerts CrowdSec writes when it pulls a blocklist: one
 # per subscribed list ("lists:<name>") and one for the community blocklist.
 BLOCKLIST_SCOPE_PREFIX = "lists:"
@@ -292,22 +299,33 @@ class AlertCache:
         """The alerts currently in the window."""
         return list(self._alerts.values())
 
-    def replace(self, alerts: Iterable[dict[str, Any]]) -> None:
+    def replace(
+        self, alerts: Iterable[dict[str, Any]], fetched_at: datetime | None = None
+    ) -> None:
         """Take the result of a full query as the new content."""
         self._alerts = {}
         self._anonymous = 0
-        self.add(alerts)
+        self.add(alerts, fetched_at)
 
-    def add(self, alerts: Iterable[dict[str, Any]]) -> int:
+    def add(
+        self, alerts: Iterable[dict[str, Any]], fetched_at: datetime | None = None
+    ) -> int:
         """Merge the result of an incremental query in.
+
+        ``fetched_at`` is stored on a copy of every alert (see
+        :data:`FETCHED_AT`); it is what turns the remaining time of a decision
+        back into an expiry.
 
         Returns how many of them were not in the window yet — only useful for
         the log, since the ban detection works on identifiers, not on counts.
         """
+        stamp = fetched_at.isoformat() if fetched_at is not None else None
         added = 0
         for alert in alerts:
             if not isinstance(alert, dict) or is_remote_alert(alert):
                 continue
+            if stamp is not None:
+                alert = {**alert, FETCHED_AT: stamp}
             key = alert_id(alert)
             if key is None:
                 self._anonymous += 1

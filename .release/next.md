@@ -23,6 +23,10 @@ Nothing inside an HTML comment is published.
   removes every decision for the address, as documented. The cards remove only
   the address's own local decisions, so a decision from the CAPI or a blocklist
   for the same address, or a range covering it, stays in place.
+- **Expired bans in the ban table show when they really ran out.** The
+  expiry was off by the age of the alert, so a ban from the morning could
+  appear to have ended before it even started, and the expired rows were
+  sorted accordingly.
 
 ### Upgrade notes
 

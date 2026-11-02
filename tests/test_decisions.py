@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+from crowdsec_component.alerts import FETCHED_AT
 from crowdsec_component.decisions import (
     build_source_index,
     build_table,
@@ -189,7 +190,7 @@ def test_simulated_alerts_do_not_enrich_anything():
 
 
 def test_history_holds_the_bans_that_have_run_out():
-    alert = make_alert(created_at="2026-08-15T06:00:00Z", decisions=(("ban", "1h"),))
+    alert = make_alert(created_at="2026-08-15T06:00:00Z", decisions=(("ban", "-5h"),))
     history = history_from_alerts([alert], [], NOW)
     assert len(history) == 1
     assert history[0].status == "expired"
@@ -199,14 +200,41 @@ def test_history_holds_the_bans_that_have_run_out():
 
 
 def test_history_leaves_out_what_is_still_enforced():
-    alert = make_alert(created_at="2026-08-15T11:00:00Z", decisions=(("ban", "4h"),))
-    # Runs until 15:00 — the live list owns this row, not the history.
+    alert = make_alert(created_at="2026-08-15T11:00:00Z", decisions=(("ban", "3h"),))
+    # Three hours left — the live list owns this row, not the history.
     assert history_from_alerts([alert], [], NOW) == []
+
+
+def test_history_counts_the_expiry_from_the_fetch_not_the_creation():
+    """CrowdSec sends the time *left* at the query, not the length of the ban.
+
+    A ban raised at 06:00 for four hours ran out at 10:00. Fetched at 11:59 the
+    LAPI reports about -1h59m for it; counted from the creation that would put
+    the expiry at 04:01, before the ban even started.
+    """
+    alert = {
+        **make_alert(created_at="2026-08-15T06:00:00Z", decisions=(("ban", "-1h59m"),)),
+        FETCHED_AT: (NOW - timedelta(minutes=1)).isoformat(),
+    }
+
+    (row,) = history_from_alerts([alert], [], NOW)
+
+    assert row.until == datetime(2026, 8, 15, 10, 0, tzinfo=UTC)
+    assert row.seconds_left == -2 * 3600
+
+
+def test_history_without_a_fetch_time_counts_from_now():
+    """An alert straight from the LAPI was fetched just now."""
+    alert = make_alert(created_at="2026-08-15T06:00:00Z", decisions=(("ban", "-2h"),))
+
+    (row,) = history_from_alerts([alert], [], NOW)
+
+    assert row.until == NOW - timedelta(hours=2)
 
 
 def test_history_skips_addresses_that_are_already_in_the_table():
     active = normalize_decisions([make_decision()], NOW)
-    alert = make_alert(created_at="2026-08-15T06:00:00Z", decisions=(("ban", "1h"),))
+    alert = make_alert(created_at="2026-08-15T06:00:00Z", decisions=(("ban", "-5h"),))
     assert history_from_alerts([alert], active, NOW) == []
 
 
@@ -220,7 +248,7 @@ def test_build_table_merges_both_sources():
         make_alert(
             ip="198.51.100.9",
             created_at="2026-08-15T06:00:00Z",
-            decisions=(("ban", "1h"),),
+            decisions=(("ban", "-5h"),),
         ),
     ]
     table = build_table(decisions, alerts, NOW)
@@ -237,7 +265,7 @@ def test_build_table_can_leave_the_history_out():
         make_alert(
             ip="198.51.100.9",
             created_at="2026-08-15T06:00:00Z",
-            decisions=(("ban", "1h"),),
+            decisions=(("ban", "-5h"),),
         )
     ]
     assert build_table([], alerts, NOW, include_history=False) == []
@@ -297,7 +325,7 @@ def test_local_only_also_filters_the_history():
             "decisions": [
                 {
                     "type": "ban",
-                    "duration": "1h",
+                    "duration": "-5h",
                     "value": "192.0.2.9",
                     "origin": "CAPI",
                 }
