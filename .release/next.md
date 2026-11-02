@@ -48,6 +48,10 @@ Nothing inside an HTML comment is published.
 - **Diagnostics leave out the machine name and the host everywhere.** Both
   were already hidden in the configuration section but still showed up in the
   raw metrics and in the error messages.
+- **The cards say what is wrong in your language.** A mistyped address in the
+  lookup card was answered with "No decision was selected". It now says the
+  address or range is not valid, and an invalid ban duration or a missing
+  bouncer key get a message of their own instead of an English one.
 
 ### Changed
 

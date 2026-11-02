@@ -87,8 +87,11 @@ export const EN = {
   "error.entry_not_loaded": "The CrowdSec instance is not loaded.",
   "error.not_ready": "The instance is still starting up.",
   "error.not_deletable":
-    "This decision is managed centrally and cannot be removed locally.",
-  "error.invalid_target": "No decision was selected.",
+    "Nothing to remove locally — the decision is managed centrally or covers the address as a range.",
+  "error.invalid_target": "Not a valid IP address or CIDR range.",
+  "error.invalid_duration": "Not a valid duration — use e.g. 4h, 30m or 1h30m.",
+  "error.decisions_unavailable":
+    "Without a bouncer API key it cannot be checked whether the decisions are managed centrally.",
 
   "unit.day": "d",
   "unit.hour": "h",
@@ -231,8 +234,11 @@ const DE: Partial<Record<TranslationKey, string>> = {
   "error.entry_not_loaded": "Die CrowdSec-Instanz ist nicht geladen.",
   "error.not_ready": "Die Instanz startet noch.",
   "error.not_deletable":
-    "Diese Entscheidung wird zentral verwaltet und kann lokal nicht entfernt werden.",
-  "error.invalid_target": "Es wurde keine Entscheidung ausgewählt.",
+    "Lokal gibt es nichts zu entfernen — die Entscheidung wird zentral verwaltet oder erfasst die Adresse als Bereich.",
+  "error.invalid_target": "Keine gültige IP-Adresse und kein gültiger CIDR-Bereich.",
+  "error.invalid_duration": "Keine gültige Dauer — z. B. 4h, 30m oder 1h30m.",
+  "error.decisions_unavailable":
+    "Ohne Bouncer-API-Key lässt sich nicht prüfen, ob die Entscheidungen zentral verwaltet werden.",
 
   "unit.day": "T",
   "unit.hour": "Std",
