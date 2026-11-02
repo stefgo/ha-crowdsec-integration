@@ -37,6 +37,10 @@ Nothing inside an HTML comment is published.
 - **An empty ban list is shown as empty.** Some CrowdSec versions answer "no
   decisions" with *not found*. The card took that for an error, kept the last
   table on screen and said the list was unavailable.
+- **Busy instances no longer lose alerts at the seams of the 24-hour window.**
+  When more alerts arrive than one query returns, the window is fetched in
+  parts; alerts that started between two of those parts were missing from the
+  counts.
 
 ### Changed
 
