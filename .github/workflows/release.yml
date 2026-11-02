@@ -58,7 +58,6 @@ jobs:
       # A BREAKING CHANGE footer raises the minor position; the major one is
       # reserved for bump: major.
       breaking: minor
-      release_name: "CrowdSec {{version}}"
       # The version lives in the manifest (what Home Assistant reports) and in
       # the card's package; the three files have to agree.
       version_files: |
