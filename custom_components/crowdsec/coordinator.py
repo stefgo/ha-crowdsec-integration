@@ -212,8 +212,13 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
         # "nothing seen yet" — then no ban events are fired.
         self._known_alert_ids: set[str] | None = None
         self._device_version: str | None = None
-        self._truncation_reported = False
-        self._bouncer_key_reported = False
+        # What the repair issues were last set to. ``None`` until the first
+        # cycle, so that one always writes the issue's state: an issue raised
+        # before a reload (by the previous coordinator) would otherwise stay
+        # once the reload fixed its cause, because "not reported" already
+        # matches "not needed".
+        self._truncation_reported: bool | None = None
+        self._bouncer_key_reported: bool | None = None
         # Raw CrowdSec metrics of the last successful scrape, only for the
         # diagnostics data.
         self.raw_metrics: dict[str, list[dict[str, Any]]] = {}
@@ -738,7 +743,7 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
 
     def _report_truncation(self, truncated: bool) -> None:
         """Create a repair issue when the 24h numbers are incomplete."""
-        if truncated == self._truncation_reported:
+        if truncated is self._truncation_reported:
             return
         self._truncation_reported = truncated
         entry = self.config_entry
@@ -770,8 +775,8 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
         the user sees an empty ban table and nothing to explain it — with no
         hint that a bouncer key is all it takes.
         """
-        needed = getattr(self.client, "decisions_need_bouncer_key", False)
-        if needed == self._bouncer_key_reported:
+        needed = bool(getattr(self.client, "decisions_need_bouncer_key", False))
+        if needed is self._bouncer_key_reported:
             return
         self._bouncer_key_reported = needed
         entry = self.config_entry

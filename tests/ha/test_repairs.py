@@ -59,6 +59,48 @@ async def test_the_issue_goes_away_again(hass, loaded_entry, fake_client):
     assert await issue_for(hass, loaded_entry) is None
 
 
+async def test_a_reload_with_a_key_clears_the_issue(hass, loaded_entry, fake_client):
+    """The key can also arrive by reconfiguring, not only through the repair.
+
+    The reload brings a new coordinator; it has never raised the issue itself
+    and still has to clear the one its predecessor left behind.
+    """
+    fake_client.decisions = None
+    fake_client.decisions_need_bouncer_key = True
+    await loaded_entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert await issue_for(hass, loaded_entry) is not None
+
+    fake_client.decisions = []
+    fake_client.decisions_need_bouncer_key = False
+    with (
+        patch("custom_components.crowdsec.build_client", return_value=fake_client),
+        patch(
+            "custom_components.crowdsec._async_register_card",
+            AsyncMock(return_value=None),
+        ),
+    ):
+        assert await hass.config_entries.async_reload(loaded_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert await issue_for(hass, loaded_entry) is None
+
+
+async def test_removing_the_entry_takes_its_issue_along(
+    hass, loaded_entry, fake_client
+):
+    fake_client.decisions = None
+    fake_client.decisions_need_bouncer_key = True
+    await loaded_entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert await issue_for(hass, loaded_entry) is not None
+
+    assert await hass.config_entries.async_remove(loaded_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert await issue_for(hass, loaded_entry) is None
+
+
 async def test_the_flow_stores_a_working_key(hass, loaded_entry):
     await async_setup_component(hass, "repairs", {})
     flow = await async_create_fix_flow(

@@ -9,6 +9,7 @@ from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.const import CONF_TIMEOUT, CONF_VERIFY_SSL, Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import CrowdSecClient
@@ -23,6 +24,8 @@ from .const import (
     DEFAULT_TIMEOUT,
     DOMAIN,
     INTEGRATION_VERSION,
+    ISSUE_ALERTS_TRUNCATED,
+    ISSUE_DECISIONS_UNAVAILABLE,
 )
 from .coordinator import CrowdSecConfigEntry, CrowdSecCoordinator
 from .services import async_setup_services, async_unload_services
@@ -144,6 +147,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: CrowdSecConfigEntry) ->
     if not remaining:
         async_unload_services(hass)
     return True
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: CrowdSecConfigEntry) -> None:
+    """Take the instance's repair issues with it.
+
+    They are keyed by the entry; nothing would ever clear them once the entry
+    is gone, and the repair flow would only answer "instance not found".
+    """
+    for issue in (ISSUE_ALERTS_TRUNCATED, ISSUE_DECISIONS_UNAVAILABLE):
+        ir.async_delete_issue(hass, DOMAIN, f"{issue}_{entry.entry_id}")
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: CrowdSecConfigEntry) -> None:

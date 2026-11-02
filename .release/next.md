@@ -30,6 +30,10 @@ Nothing inside an HTML comment is published.
 - **The ban table shows the effect of every ban and unban at once.** A second
   click within a few seconds of the first used to come back with the row it
   had just removed.
+- **Repair hints go away once their cause is fixed.** A hint about a missing
+  bouncer key or incomplete alert numbers stayed in Repairs after the key was
+  added through *Reconfigure* or the limit was raised in the options, until
+  Home Assistant restarted. Removing an instance now also removes its hints.
 
 ### Changed
 

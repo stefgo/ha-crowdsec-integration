@@ -13,7 +13,9 @@ from custom_components.crowdsec.api import (
     CrowdSecConnectionError,
 )
 from custom_components.crowdsec.const import (
+    DOMAIN,
     EVENT_NEW_BAN,
+    ISSUE_ALERTS_TRUNCATED,
     LOCAL_ORIGINS,
     MAX_DECISION_ROWS,
 )
@@ -194,6 +196,33 @@ async def test_truncation_survives_until_a_full_query_clears_it(
 
     coordinator.request_full_alert_poll()
     assert (await refresh(hass, coordinator)).alerts_truncated is False
+
+
+async def test_a_reload_clears_a_truncation_issue_it_did_not_raise(
+    hass, loaded_entry, fake_client
+):
+    """After raising the limit the options reload brings a fresh coordinator."""
+    from unittest.mock import AsyncMock, patch
+
+    from homeassistant.helpers import issue_registry as ir
+
+    issue_id = f"{ISSUE_ALERTS_TRUNCATED}_{loaded_entry.entry_id}"
+    fake_client.alerts_truncated = True
+    await refresh(hass, loaded_entry.runtime_data)
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
+
+    fake_client.alerts_truncated = False
+    with (
+        patch("custom_components.crowdsec.build_client", return_value=fake_client),
+        patch(
+            "custom_components.crowdsec._async_register_card",
+            AsyncMock(return_value=None),
+        ),
+    ):
+        assert await hass.config_entries.async_reload(loaded_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
 
 
 # -- Ban events -------------------------------------------------------------
