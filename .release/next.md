@@ -48,6 +48,9 @@ Nothing inside an HTML comment is published.
   `192.0.2.0/24` from Home Assistant now gives the decision the scope `Range`,
   the way `cscli decisions add --range` does, instead of `Ip`. Bans set before
   the update keep their old scope until they expire.
+- **A malformed ban duration is refused right away.** Values such as `1h30`
+  (the last number has no unit) used to pass the check and then fail at
+  CrowdSec with a less helpful message. Write `1h30m` instead.
 
 ### Upgrade notes
 

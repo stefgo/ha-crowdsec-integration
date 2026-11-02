@@ -37,6 +37,10 @@ from .const import (
 # A Go duration as CrowdSec writes it: "3h59m58.5s", "-1h30m", "168h0m0s".
 # The sign belongs to the whole value — an expired decision counts backwards.
 _DURATION_PART = re.compile(r"(\d+(?:\.\d+)?)([a-zµ]+)")
+# The whole value has to consist of such parts. ``findall`` alone skips
+# whatever does not match, which let "1h30" (a number without its unit) and
+# "4h xyz" through as four hours — and the LAPI then rejected them.
+_DURATION_WHOLE = re.compile(r"(?:\d+(?:\.\d+)?[a-zµ]+)+")
 _DURATION_UNITS = {
     "ns": 1e-9,
     "us": 1e-6,
@@ -73,9 +77,9 @@ def parse_go_duration(raw: Any) -> float | None:
         sign = -1.0 if body[0] == "-" else 1.0
         body = body[1:]
 
-    matches = _DURATION_PART.findall(body)
-    if not matches:
+    if not _DURATION_WHOLE.fullmatch(body):
         return None
+    matches = _DURATION_PART.findall(body)
 
     total = 0.0
     for amount, unit in matches:

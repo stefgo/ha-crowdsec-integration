@@ -99,6 +99,11 @@ def test_go_duration_rejects_what_it_cannot_read():
     assert parse_go_duration("forever") is None
     # An unknown unit would be wrong by a factor — better nothing at all.
     assert parse_go_duration("5w") is None
+    # A number without its unit, or anything trailing, is not a duration —
+    # reading the parts that do match would turn "1h30" into one hour.
+    assert parse_go_duration("1h30") is None
+    assert parse_go_duration("4h xyz") is None
+    assert parse_go_duration("4h 30m") is None
 
 
 # -- Origins ----------------------------------------------------------------

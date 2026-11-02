@@ -73,6 +73,10 @@ def test_valid_durations(raw):
         # Go has no day unit and neither does CrowdSec's parser.
         "1d",
         "7d12h",
+        # Only the matching parts used to be read, so these passed as 1h and
+        # 4h and failed at the LAPI instead.
+        "1h30",
+        "4h xyz",
     ],
 )
 def test_invalid_durations(raw):
