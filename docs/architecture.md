@@ -94,7 +94,9 @@ compares against to spot stale values.
 - **The delete guard asks the LAPI, not the table.** A purely central address is
   absent from the local-only table, so a table-based check would never fire
   while the lookup card happily offers the unban. The by-id path keeps a table
-  check as a safety net; the LAPI cannot look a decision up by id.
+  check as a safety net; the LAPI cannot look a decision up by id. Without a
+  bouncer key the lookup has nothing to show, and the guard refuses
+  (`decisions_unavailable`) rather than letting the delete through unchecked.
 - **The decision list is read with the bouncer key, never the machine token.**
   CrowdSec routes `GET /v1/decisions` through its API-key middleware in every
   version; machines may only delete there. Asking with the token earns a 403,

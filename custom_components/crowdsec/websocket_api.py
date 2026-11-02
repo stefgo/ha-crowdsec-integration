@@ -230,7 +230,19 @@ async def ws_decisions_delete(
             connection.send_error(msg["id"], "request_failed", str(err))
             return
 
-        report = build_ip_report(ip, existing or [], [])
+        if existing is None:
+            # No bouncer key, so the decisions cannot be read. Letting the
+            # delete through unchecked would make the guard a no-op exactly
+            # where it cannot see — refuse instead of guessing.
+            connection.send_error(
+                msg["id"],
+                "decisions_unavailable",
+                f"Cannot tell whether the decisions for {ip} are managed "
+                "centrally — reading them needs a bouncer API key.",
+            )
+            return
+
+        report = build_ip_report(ip, existing, [])
         if report.blocked and not report.deletable:
             connection.send_error(
                 msg["id"],

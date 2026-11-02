@@ -216,6 +216,29 @@ async def test_an_unknown_address_is_not_refused(hass, ws, loaded_entry, fake_cl
     assert result["success"]
 
 
+async def test_an_unreadable_address_is_refused(hass, ws, loaded_entry, fake_client):
+    """Without a bouncer key the guard is blind — it must not wave things through.
+
+    ``None`` from the lookup means the decision list cannot be read at all; an
+    empty list would mean there is nothing to protect.
+    """
+    fake_client.lookup_decisions = None
+
+    with patch.object(fake_client, "async_unban_ip", AsyncMock()) as unban:
+        result = await send(
+            ws,
+            {
+                "type": WS_DECISIONS_DELETE,
+                "config_entry_id": loaded_entry.entry_id,
+                "ip": "192.0.2.50",
+            },
+        )
+
+    assert not result["success"]
+    assert result["error"]["code"] == "decisions_unavailable"
+    unban.assert_not_awaited()
+
+
 async def test_a_malformed_address_is_refused(ws, loaded_entry):
     """The command is a public interface, not only the card's back door."""
     result = await send(
