@@ -1,7 +1,9 @@
 """Tests for the decision routes of the client.
 
-The HTTP layer stays out of it: what is tested is which path the client takes
-when the LAPI refuses the machine token or does not know the route at all.
+Reading goes through the bouncer key only — CrowdSec serves ``GET
+/v1/decisions`` to bouncers alone — so those tests run against a fake session
+and check what actually goes over the wire. Deleting uses the machine token;
+there the HTTP layer stays out of it.
 """
 
 from __future__ import annotations
@@ -21,10 +23,38 @@ from crowdsec_component.api import (
 )
 
 
-def build_client(bouncer_api_key=None) -> CrowdSecClient:
-    """A client without a session — the HTTP calls are replaced."""
+class FakeResponse:
+    def __init__(self, status: int, body) -> None:
+        self.status = status
+        self._body = body
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc) -> None:
+        return None
+
+    async def json(self, content_type=None):
+        return self._body
+
+
+class FakeSession:
+    """Answers every GET with one canned response and records the requests."""
+
+    def __init__(self, status: int = 200, body=None) -> None:
+        self.status = status
+        self.body = [] if body is None else body
+        self.requests: list[dict] = []
+
+    def get(self, url, params=None, headers=None, **kwargs):
+        self.requests.append({"url": url, "params": params, "headers": headers})
+        return FakeResponse(self.status, self.body)
+
+
+def build_client(bouncer_api_key=None, session=None) -> CrowdSecClient:
+    """A client whose machine-token path must not be taken for reading."""
     return CrowdSecClient(
-        session=None,
+        session=session,
         metrics_url="http://localhost:6060/metrics",
         lapi_url="http://localhost:8080",
         machine_id="hass",
@@ -44,126 +74,86 @@ DECISION = {"id": 1, "value": "192.0.2.1", "duration": "4h", "type": "ban"}
 # -- Reading the list -------------------------------------------------------
 
 
-def test_machine_token_is_asked_first():
-    calls: list[tuple] = []
+def forbid_machine_token(client: CrowdSecClient) -> None:
+    async def fake_request(*args, **kwargs):
+        raise AssertionError("the decision list must never use the machine token")
+
+    client._async_lapi_request = fake_request  # type: ignore[assignment]
+
+
+def test_the_list_is_read_with_the_bouncer_key_only():
+    """The machine token would only earn a 403 and a re-login (issue #33)."""
+    session = FakeSession(body=[DECISION])
 
     async def scenario():
-        client = build_client(bouncer_api_key="key")
+        client = build_client(bouncer_api_key="key", session=session)
+        forbid_machine_token(client)
+        result = await client.async_get_decisions()
+        return client, result
 
-        async def fake_request(method, path, params=None, *args, **kwargs):
-            calls.append((method, path, params))
-            return [DECISION]
-
-        async def fake_bouncer(*args, **kwargs):
-            raise AssertionError("the bouncer key must stay untouched here")
-
-        client._async_lapi_request = fake_request  # type: ignore[assignment]
-        client._async_bouncer_decisions = fake_bouncer  # type: ignore[assignment]
-        return await client.async_get_decisions()
-
-    assert run(scenario) == [DECISION]
-    assert calls == [("GET", "/v1/decisions", None)]
+    client, result = run(scenario)
+    assert result == [DECISION]
+    assert client.decisions_need_bouncer_key is False
+    (request,) = session.requests
+    assert request["url"] == "http://localhost:8080/v1/decisions"
+    assert request["headers"]["X-Api-Key"] == "key"
+    assert "Authorization" not in request["headers"]
+    assert (client.decision_requests, client.bouncer_decision_requests) == (1, 1)
 
 
-def test_a_404_falls_back_to_the_bouncer_key():
+@pytest.mark.parametrize("query", ["list", "lookup"])
+def test_without_a_key_nothing_is_sent(query):
+    """No request that is bound to fail — the repair asks for a key instead."""
+    session = FakeSession()
+
     async def scenario():
-        client = build_client(bouncer_api_key="key")
+        client = build_client(session=session)
+        forbid_machine_token(client)
+        if query == "list":
+            result = await client.async_get_decisions()
+        else:
+            result = await client.async_lookup_ip("192.0.2.1")
+        return client, result
 
-        async def fake_request(*args, **kwargs):
-            # none_on_404 turns the 404 into None.
-            return None
-
-        async def fake_bouncer(*args, **kwargs):
-            return [DECISION]
-
-        client._async_lapi_request = fake_request  # type: ignore[assignment]
-        client._async_bouncer_decisions = fake_bouncer  # type: ignore[assignment]
-        return await client.async_get_decisions()
-
-    assert run(scenario) == [DECISION]
-
-
-def test_a_404_without_a_bouncer_key_gives_up():
-    async def scenario():
-        client = build_client()
-
-        async def fake_request(*args, **kwargs):
-            return None
-
-        client._async_lapi_request = fake_request  # type: ignore[assignment]
-        return await client.async_get_decisions()
-
+    client, result = run(scenario)
     # None means "the metric has to take over" — not an empty ban list.
-    assert run(scenario) is None
+    assert result is None
+    assert client.decisions_need_bouncer_key is True
+    assert session.requests == []
+    assert client.decision_requests == 0
 
 
-def test_a_denied_route_falls_back_to_the_bouncer_key():
-    async def scenario():
-        client = build_client(bouncer_api_key="key")
-
-        async def fake_request(*args, **kwargs):
-            raise CrowdSecAuthError("denied", "decisions")
-
-        async def fake_bouncer(*args, **kwargs):
-            return [DECISION]
-
-        client._async_lapi_request = fake_request  # type: ignore[assignment]
-        client._async_bouncer_decisions = fake_bouncer  # type: ignore[assignment]
-        return await client.async_get_decisions()
-
-    assert run(scenario) == [DECISION]
-
-
-def test_a_denied_route_without_a_key_does_not_break_the_instance():
-    """A refusal on this one route must not look like an outage.
-
-    The rest of the integration does not depend on the decision list; raising
-    here would mark the whole instance unreachable over a single feature.
-    """
+def test_a_404_falls_back_to_the_metric():
+    """Not every CrowdSec version answers an empty list with an empty array."""
 
     async def scenario():
-        client = build_client()
-
-        async def fake_request(*args, **kwargs):
-            raise CrowdSecAuthError("denied", "decisions")
-
-        client._async_lapi_request = fake_request  # type: ignore[assignment]
+        client = build_client(bouncer_api_key="key", session=FakeSession(404))
         return await client.async_get_decisions()
 
     assert run(scenario) is None
 
 
-def test_a_rejected_bouncer_key_still_surfaces():
+@pytest.mark.parametrize("status", [401, 403])
+def test_a_rejected_bouncer_key_still_surfaces(status):
     """A wrong key is a configuration error and has to be reported."""
 
     async def scenario():
-        client = build_client(bouncer_api_key="wrong")
-
-        async def fake_request(*args, **kwargs):
-            return None
-
-        async def fake_bouncer(*args, **kwargs):
-            raise CrowdSecAuthError("rejected", ENDPOINT_BOUNCER)
-
-        client._async_lapi_request = fake_request  # type: ignore[assignment]
-        client._async_bouncer_decisions = fake_bouncer  # type: ignore[assignment]
+        client = build_client(bouncer_api_key="wrong", session=FakeSession(status))
+        forbid_machine_token(client)
         return await client.async_get_decisions()
 
-    with pytest.raises(CrowdSecAuthError):
+    with pytest.raises(CrowdSecAuthError) as err:
         run(scenario)
+    assert err.value.endpoint == ENDPOINT_BOUNCER
 
 
 def test_non_objects_are_dropped_and_junk_is_rejected():
     async def scenario(answer):
-        client = build_client()
-
-        async def fake_request(*args, **kwargs):
-            return answer
-
-        client._async_lapi_request = fake_request  # type: ignore[assignment]
+        client = build_client(bouncer_api_key="key", session=FakeSession(body=answer))
         return await client.async_get_decisions()
 
     assert asyncio.run(scenario([DECISION, "nonsense", None])) == [DECISION]
+    assert asyncio.run(scenario(None)) == []
     with pytest.raises(CrowdSecConnectionError):
         asyncio.run(scenario({"decisions": []}))
 
@@ -203,99 +193,46 @@ def test_deleted_count_reads_both_shapes():
 
 def test_origins_are_passed_to_the_lapi():
     """The filter is what keeps a subscribed blocklist out of every cycle."""
-    calls: list[tuple] = []
+    session = FakeSession(body=[DECISION])
 
     async def scenario():
-        client = build_client()
-
-        async def fake_request(method, path, params=None, *args, **kwargs):
-            calls.append((method, path, params))
-            return [DECISION]
-
-        client._async_lapi_request = fake_request  # type: ignore[assignment]
+        client = build_client(bouncer_api_key="key", session=session)
         return await client.async_get_decisions(("cscli", "crowdsec"))
 
     assert run(scenario) == [DECISION]
-    assert calls == [("GET", "/v1/decisions", {"origins": "cscli,crowdsec"})]
-
-
-def test_the_filter_survives_the_fallback_to_the_bouncer_key():
-    """The fallback path must not quietly fetch everything again."""
-    seen: list = []
-
-    async def scenario():
-        client = build_client(bouncer_api_key="key")
-
-        async def fake_request(*args, **kwargs):
-            raise CrowdSecAuthError("denied", "decisions")
-
-        async def fake_bouncer(params=None):
-            seen.append(params)
-            return [DECISION]
-
-        client._async_lapi_request = fake_request  # type: ignore[assignment]
-        client._async_bouncer_decisions = fake_bouncer  # type: ignore[assignment]
-        return await client.async_get_decisions(("cscli",))
-
-    assert run(scenario) == [DECISION]
-    assert seen == [{"origins": "cscli"}]
+    assert session.requests[0]["params"] == {"origins": "cscli,crowdsec"}
 
 
 # -- Looking one address up -------------------------------------------------
 
 
-def test_a_lookup_asks_for_everything_covering_the_address():
-    """contains=true is what finds the /24 an address sits in."""
-    calls: list[tuple] = []
+def lookup_params(target: str) -> dict:
+    session = FakeSession(body=[DECISION])
 
     async def scenario():
-        client = build_client()
-
-        async def fake_request(method, path, params=None, *args, **kwargs):
-            calls.append((method, path, params))
-            return [DECISION]
-
-        client._async_lapi_request = fake_request  # type: ignore[assignment]
-        return await client.async_lookup_ip("192.0.2.1")
+        client = build_client(bouncer_api_key="key", session=session)
+        forbid_machine_token(client)
+        return await client.async_lookup_ip(target)
 
     assert run(scenario) == [DECISION]
-    assert calls == [("GET", "/v1/decisions", {"ip": "192.0.2.1", "contains": "true"})]
+    (request,) = session.requests
+    assert request["headers"]["X-Api-Key"] == "key"
+    return request["params"]
+
+
+def test_a_lookup_asks_for_everything_covering_the_address():
+    """contains=true is what finds the /24 an address sits in."""
+    assert lookup_params("192.0.2.1") == {"ip": "192.0.2.1", "contains": "true"}
 
 
 def test_a_range_is_looked_up_as_a_range():
     """The LAPI has its own parameter for it; ip= would not match."""
-    calls: list[tuple] = []
-
-    async def scenario():
-        client = build_client()
-
-        async def fake_request(method, path, params=None, *args, **kwargs):
-            calls.append((method, path, params))
-            return []
-
-        client._async_lapi_request = fake_request  # type: ignore[assignment]
-        return await client.async_lookup_ip("10.0.0.0/24")
-
-    assert run(scenario) == []
-    assert calls[0][2] == {"range": "10.0.0.0/24", "contains": "true"}
+    assert lookup_params("10.0.0.0/24") == {"range": "10.0.0.0/24", "contains": "true"}
 
 
 def test_a_lookup_ignores_the_configured_scope():
     """The question is whether the address is blocked at all, by anyone."""
-    calls: list[tuple] = []
-
-    async def scenario():
-        client = build_client()
-
-        async def fake_request(method, path, params=None, *args, **kwargs):
-            calls.append(params)
-            return []
-
-        client._async_lapi_request = fake_request  # type: ignore[assignment]
-        await client.async_lookup_ip("192.0.2.1")
-
-    run(scenario)
-    assert "origins" not in calls[0]
+    assert "origins" not in lookup_params("192.0.2.1")
 
 
 def test_the_alert_lookup_carries_the_window_and_a_small_limit():

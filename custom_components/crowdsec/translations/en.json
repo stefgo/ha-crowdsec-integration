@@ -16,7 +16,7 @@
         "data_description": {
           "metrics_url": "Usually http://HOST:6060/metrics",
           "lapi_url": "Usually http://HOST:8080",
-          "bouncer_api_key": "Only needed for an exact decision count; otherwise the cs_active_decisions metric is used."
+          "bouncer_api_key": "Needed for the card's ban table and the IP lookup — CrowdSec hands the decision list to bouncers only. Without it, only the count from the cs_active_decisions metric is available."
         }
       },
       "reconfigure": {
@@ -31,7 +31,7 @@
           "verify_ssl": "Verify SSL certificate"
         },
         "data_description": {
-          "bouncer_api_key": "Add one here if the ban table stays empty — some CrowdSec versions only serve the decision list to bouncers."
+          "bouncer_api_key": "Add one here if the ban table stays empty — CrowdSec hands the decision list to bouncers only."
         }
       },
       "reauth_confirm": {
@@ -92,7 +92,7 @@
         "step": {
           "confirm": {
             "title": "Add a bouncer API key",
-            "description": "The instance \"{name}\" refuses the decision list to the machine token — some CrowdSec versions only serve it to bouncers. Create a key with `cscli bouncers add homeassistant` and paste it here; the ban table then fills up again.\n\n{error_detail}",
+            "description": "CrowdSec hands the decision list to bouncers only, and no bouncer API key is set up for the instance \"{name}\". Create a key with `cscli bouncers add homeassistant` and paste it here; the ban table and the IP lookup then fill up.\n\n{error_detail}",
             "data": {
               "bouncer_api_key": "Bouncer API key"
             }

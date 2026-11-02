@@ -1,10 +1,9 @@
 """Repair flows.
 
-Only one so far: some CrowdSec versions refuse ``/v1/decisions`` to a machine
-token and serve it to bouncers only. The result is an empty ban table with no
-visible reason — the explanation sits in a log warning nobody reads. The flow
-below asks for a bouncer API key, tries it against the instance and stores it,
-which is the whole fix.
+Only one so far: CrowdSec serves ``GET /v1/decisions`` to bouncers only, so
+without a bouncer API key the ban table stays empty with no visible reason. The
+flow below asks for a key, tries it against the instance and stores it, which
+is the whole fix.
 """
 
 from __future__ import annotations
@@ -57,8 +56,6 @@ class BouncerKeyRepairFlow(RepairsFlow):
             }
             client = build_client(self.hass, data, entry.data.get("verify_ssl", True))
             try:
-                # The bouncer path specifically — a working machine token would
-                # otherwise let a wrong key pass unnoticed.
                 await client.async_get_active_decision_count()
             except CrowdSecAuthError as err:
                 errors["base"] = "invalid_auth_bouncer"

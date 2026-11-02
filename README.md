@@ -63,23 +63,21 @@ On the CrowdSec side, three things:
    share a host or container that file holds the agent's own credentials —
    overwriting it locks the agent out of its LAPI.
 
-   They are needed for `/v1/alerts` (New bans 24h, Top scenario) and for
-   `/v1/decisions`, which is the list behind the card's table and behind the
-   lookup.
+   They are needed for `/v1/alerts` (New bans 24h, Top scenario, the history in
+   the lookup) and for banning and unbanning from the card.
 
-3. **Optional: a bouncer API key**:
+3. **A bouncer API key** for the card's ban table and the IP lookup:
 
    ```bash
    sudo cscli bouncers add homeassistant
    ```
 
-   The machine credentials already cover the decision list. The key is only a
-   fallback for CrowdSec versions that serve `/v1/decisions` to bouncers alone;
-   if neither path works, the card's table stays empty. The `Active decisions`
-   sensor is not affected either way — it always reads the
-   `cs_active_decisions` metric. Should the integration ever query with the
-   key, `homeassistant` shows up as a bouncer of its own; disable its entity
-   (see [Bouncers](#bouncers)).
+   CrowdSec hands the decision list (`GET /v1/decisions`) to bouncers only —
+   machine credentials are refused there. Without a key the card's table and
+   the lookup stay empty and Home Assistant offers a repair to add one. The
+   `Active decisions` sensor is not affected either way — it always reads the
+   `cs_active_decisions` metric. With the key, `homeassistant` shows up as a
+   bouncer of its own; disable its entity (see [Bouncers](#bouncers)).
 
 ## Installation
 
@@ -104,7 +102,7 @@ The setup dialog asks for:
 | Metrics URL | `http://10.0.0.5:6060/metrics` |
 | LAPI URL | `http://10.0.0.5:8080` |
 | Machine ID / password | from `cscli machines add` |
-| Bouncer API key | optional, from `cscli bouncers add` |
+| Bouncer API key | from `cscli bouncers add` — optional, but the ban table needs it |
 | Verify SSL | turn off for self-signed certificates |
 
 Addresses and credentials can be changed later under *Reconfigure*; leaving
@@ -551,9 +549,9 @@ curl -si -X POST http://<host>:8080/v1/watchers/login \
   -d '{"machine_id":"<id>","password":"<password>"}'
 ```
 
-If `/v1/decisions` answers with a **404**, that is not an error: not every
-CrowdSec version returns an empty array there. The integration then tries the
-bouncer key. Only if that fails too does the card's table stay empty — the
+The decision list is read with the bouncer key only. If `/v1/decisions`
+answers with a **404**, that is not an error: not every CrowdSec version
+returns an empty array there. The card's table then stays empty — the
 `Active decisions` sensor is unaffected, because it reads the
 `cs_active_decisions` metric in every case.
 

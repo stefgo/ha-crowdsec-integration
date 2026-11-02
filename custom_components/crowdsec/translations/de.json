@@ -16,7 +16,7 @@
         "data_description": {
           "metrics_url": "Üblicherweise http://HOST:6060/metrics",
           "lapi_url": "Üblicherweise http://HOST:8080",
-          "bouncer_api_key": "Nur nötig für eine exakte Decision-Zahl; sonst wird die Metrik cs_active_decisions verwendet."
+          "bouncer_api_key": "Nötig für die Ban-Tabelle der Karte und die IP-Suche — CrowdSec gibt die Decision-Liste nur an Bouncer heraus. Ohne Key gibt es nur die Anzahl aus der Metrik cs_active_decisions."
         }
       },
       "reconfigure": {
@@ -31,7 +31,7 @@
           "verify_ssl": "SSL-Zertifikat prüfen"
         },
         "data_description": {
-          "bouncer_api_key": "Hier einen hinterlegen, wenn die Ban-Tabelle leer bleibt — manche CrowdSec-Versionen liefern die Decision-Liste nur an Bouncer."
+          "bouncer_api_key": "Hier einen hinterlegen, wenn die Ban-Tabelle leer bleibt — CrowdSec gibt die Decision-Liste nur an Bouncer heraus."
         }
       },
       "reauth_confirm": {
@@ -92,7 +92,7 @@
         "step": {
           "confirm": {
             "title": "Bouncer-API-Key hinterlegen",
-            "description": "Die Instanz „{name}\" verweigert dem Machine-Token die Decision-Liste — manche CrowdSec-Versionen liefern sie nur an Bouncer. Mit `cscli bouncers add homeassistant` einen Key anlegen und hier einfügen; danach füllt sich die Ban-Tabelle wieder.\n\n{error_detail}",
+            "description": "CrowdSec gibt die Decision-Liste nur an Bouncer heraus, und für die Instanz „{name}\" ist kein Bouncer-API-Key hinterlegt. Mit `cscli bouncers add homeassistant` einen Key anlegen und hier einfügen; danach füllen sich die Ban-Tabelle und die IP-Suche.\n\n{error_detail}",
             "data": {
               "bouncer_api_key": "Bouncer-API-Key"
             }
