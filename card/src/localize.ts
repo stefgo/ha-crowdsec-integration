@@ -142,7 +142,7 @@ export const EN = {
   "lookup.last_seen": "Last seen",
   "lookup.scenarios": "Scenarios",
   "lookup.not_deletable":
-    "Managed centrally — a local delete would be undone on the next pull.",
+    "No local decision names this address — what blocks it is managed centrally (a local delete would be undone on the next pull) or a range with its own row.",
   "lookup.ban": "Ban {ip} manually",
   "lookup.banning": "Banning …",
   "lookup.ban_duration": "Duration",
@@ -290,7 +290,7 @@ const DE: Partial<Record<TranslationKey, string>> = {
   "lookup.last_seen": "Zuletzt gesehen",
   "lookup.scenarios": "Szenarien",
   "lookup.not_deletable":
-    "Zentral verwaltet — ein lokales Löschen würde beim nächsten Abgleich rückgängig gemacht.",
+    "Keine lokale Entscheidung nennt diese Adresse — gesperrt ist sie zentral (ein lokales Löschen würde beim nächsten Abgleich rückgängig gemacht) oder durch einen Bereich mit eigener Zeile.",
   "lookup.ban": "Sperre {ip} manuell",
   "lookup.banning": "Wird gesperrt …",
   "lookup.ban_duration": "Dauer",

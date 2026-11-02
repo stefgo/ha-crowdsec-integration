@@ -177,3 +177,17 @@ def test_own_local_ids_compare_ipv6_by_meaning():
     )
 
     assert report.own_local_ids() == [7]
+
+
+def test_a_covering_local_range_does_not_make_the_address_deletable():
+    """ "Remove all for this address" would find nothing of its own to remove.
+
+    The range is local and can go — through its own row, which says so.
+    """
+    report = build_ip_report(
+        "192.0.2.10", [decision("192.0.2.0/24", origin="cscli")], [], NOW
+    )
+
+    assert report.blocked is True
+    assert report.deletable is False
+    assert report.decisions[0].deletable is True

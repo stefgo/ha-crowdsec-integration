@@ -54,7 +54,8 @@ export interface IpReport {
    * it — the case the ban table structurally cannot show.
    */
   covering_ranges: string[];
-  /** Whether anything found here can be lifted from Home Assistant. */
+  /** Whether a local decision names the address itself — what "remove all
+   *  decisions for this address" acts on. A covering range has its own row. */
   deletable: boolean;
   alerts: number;
   first_seen: string | null;

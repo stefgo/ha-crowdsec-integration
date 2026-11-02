@@ -473,7 +473,9 @@ class IpReport:
     # naming it. Without this the card would show a row whose value is not
     # what was searched for and leave the reader guessing.
     covering_ranges: list[str] = field(default_factory=list)
-    # Whether anything here can be lifted from Home Assistant at all.
+    # Whether "remove all decisions for this address" has anything to remove:
+    # a local decision naming the address itself (see ``own_local_ids``). A
+    # local range covering it is lifted through its own row instead.
     deletable: bool = False
 
     alerts: int = 0
@@ -549,9 +551,9 @@ def build_ip_report(
         target=target,
         decisions=active,
         blocked=bool(active),
-        deletable=any(record.deletable for record in active),
         alerts_available=alerts_available,
     )
+    report.deletable = bool(report.own_local_ids())
 
     if active:
         longest = active[0]
