@@ -45,6 +45,9 @@ Nothing inside an HTML comment is published.
   instance or adding a key through the repair fetched the whole decision list
   just to see whether the key works — hundreds of thousands of entries with a
   blocklist subscribed. It now asks about a single address.
+- **Diagnostics leave out the machine name and the host everywhere.** Both
+  were already hidden in the configuration section but still showed up in the
+  raw metrics and in the error messages.
 
 ### Changed
 
