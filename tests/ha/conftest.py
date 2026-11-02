@@ -163,7 +163,7 @@ class FakeClient:
         self.decision_requests = 0
         self.bouncer_decision_requests = 0
         # The lookup path is separate from the table: it goes to the LAPI
-        # per request and ignores the configured scope.
+        # per request and covers every origin, not only the local ones.
         self.lookup_decisions: list[dict[str, Any]] | None = []
         self.lookup_alerts: list[dict[str, Any]] = []
         self.lookup_queries: list[str] = []

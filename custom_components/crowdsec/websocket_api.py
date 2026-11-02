@@ -309,8 +309,8 @@ async def ws_ip_lookup(
     """Everything the instance knows about one address or range.
 
     Deliberately not served from the coordinator's data: that is the table,
-    which is filtered by the configured scope and cannot show a range covering
-    the address. This asks the LAPI directly, and only when someone asks.
+    which holds local decisions only and cannot show a range covering the
+    address. This asks the LAPI directly, and only when someone asks.
     """
     coordinator = _coordinator(hass, connection, msg)
     if coordinator is None:

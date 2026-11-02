@@ -532,8 +532,8 @@ class CrowdSecClient:
         enforced; it cannot show that an address is covered by a ``/24`` from a
         blocklist, because that row is about the range, not about the address
         somebody is asking about. ``contains`` is exactly that lookup — and
-        unlike the list, it goes to *all* origins regardless of the configured
-        scope, since here the point is to find out whether this address is
+        unlike the table, which holds the local origins only, it goes to *all*
+        origins, since here the point is to find out whether this address is
         blocked at all.
         """
         key = "range" if "/" in target else "ip"

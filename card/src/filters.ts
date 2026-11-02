@@ -1,8 +1,8 @@
 /**
  * Search, filter and sort — the part of the card that has no DOM in it.
  *
- * Everything happens on the client: the whole table already arrives with one
- * WebSocket call, so a keystroke must not cost a round trip.
+ * Everything happens on the client: the whole table is already in the browser
+ * (fetched page by page), so a keystroke must not cost a round trip.
  */
 
 import type { Decision, DecisionStatus, SortColumn } from "./types";
@@ -17,10 +17,9 @@ export interface FilterState {
 }
 
 /**
- * What the card opens with: what is being enforced right now, and only the
- * decisions this Home Assistant owns. The CAPI and the blocklists contribute
- * thousands of rows that can neither be acted on nor read usefully — they are
- * one chip away when someone wants them.
+ * What the card opens with: what is being enforced right now. The table holds
+ * local decisions only — the CAPI and the blocklists are the lookup card's
+ * business — so the expired history is the one thing a chip brings in.
  */
 export const emptyFilter = (): FilterState => ({
   search: "",

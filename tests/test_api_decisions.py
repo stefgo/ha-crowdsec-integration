@@ -326,7 +326,7 @@ def test_a_range_is_looked_up_as_a_range():
     assert lookup_params("10.0.0.0/24") == {"range": "10.0.0.0/24", "contains": "true"}
 
 
-def test_a_lookup_ignores_the_configured_scope():
+def test_a_lookup_asks_every_origin():
     """The question is whether the address is blocked at all, by anyone."""
     assert "origins" not in lookup_params("192.0.2.1")
 
