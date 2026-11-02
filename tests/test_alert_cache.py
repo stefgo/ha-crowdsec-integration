@@ -10,7 +10,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from crowdsec_component.alerts import AlertCache, alert_timestamp, summarize_alerts
+from crowdsec_component.alerts import (
+    FETCHED_AT,
+    AlertCache,
+    alert_timestamp,
+    summarize_alerts,
+)
 
 NOW = datetime(2026, 8, 15, 12, 0, tzinfo=UTC)
 WINDOW = timedelta(hours=24)
@@ -48,6 +53,22 @@ def test_a_known_alert_is_updated_not_ignored():
 
     assert len(cache) == 1
     assert cache.alerts[0]["events_count"] == 9
+
+
+def test_the_fetch_time_travels_with_every_alert():
+    """It is what turns the time left of a decision back into an expiry."""
+    original = make_alert(1, 5)
+    cache = AlertCache(WINDOW)
+    cache.replace([original], NOW - timedelta(minutes=5))
+    cache.add([make_alert(2, 1)], NOW)
+
+    stamps = {alert["id"]: alert[FETCHED_AT] for alert in cache.alerts}
+    assert stamps == {
+        1: (NOW - timedelta(minutes=5)).isoformat(),
+        2: NOW.isoformat(),
+    }
+    # A copy is stamped, not the object the LAPI client handed over.
+    assert FETCHED_AT not in original
 
 
 def test_a_full_query_replaces_the_content():

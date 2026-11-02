@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from time import monotonic
 from typing import Any
@@ -212,8 +212,13 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
         # "nothing seen yet" — then no ban events are fired.
         self._known_alert_ids: set[str] | None = None
         self._device_version: str | None = None
-        self._truncation_reported = False
-        self._bouncer_key_reported = False
+        # What the repair issues were last set to. ``None`` until the first
+        # cycle, so that one always writes the issue's state: an issue raised
+        # before a reload (by the previous coordinator) would otherwise stay
+        # once the reload fixed its cause, because "not reported" already
+        # matches "not needed".
+        self._truncation_reported: bool | None = None
+        self._bouncer_key_reported: bool | None = None
         # Raw CrowdSec metrics of the last successful scrape, only for the
         # diagnostics data.
         self.raw_metrics: dict[str, list[dict[str, Any]]] = {}
@@ -259,6 +264,33 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
         picture, not a partially aged one.
         """
         self._force_full_alerts = True
+
+    async def async_refresh_decisions(self) -> None:
+        """Re-read the decision list and rebuild the table, nothing else.
+
+        For the moment right after a ban or an unban, when the answer has to
+        show the effect of the click. ``async_request_refresh`` is debounced: a
+        second click within its cooldown returns before the cycle has run, and
+        the answer still holds the row that was just removed. A whole cycle
+        would also count as an interval for every idle and silence counter,
+        although no interval has passed.
+
+        One request, the cached alerts for the context, the rest of the data
+        unchanged. A failed query leaves the data as it is.
+        """
+        previous = self.data
+        if previous is None:
+            await self.async_request_refresh()
+            return
+        try:
+            raw = await self.client.async_get_decisions(self.decisions_origins)
+        except (CrowdSecAuthError, CrowdSecConnectionError) as err:
+            _LOGGER.debug("Re-reading the decision list failed: %s", err)
+            return
+
+        data = replace(previous)
+        self._apply_decisions(data, raw, self._alert_cache.alerts, previous)
+        self.async_set_updated_data(data)
 
     # -- Update cycle -----------------------------------------------------
 
@@ -595,22 +627,23 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
 
     def _absorb_alerts(self, result: AlertResult, full: bool, now: float) -> None:
         """Merge the result of a query into the rolling window."""
+        fetched_at = datetime.now(UTC)
         if full:
-            self._alert_cache.replace(result.alerts)
+            self._alert_cache.replace(result.alerts, fetched_at)
             self._alerts_full_at = now
             self._force_full_alerts = False
             # A full query re-establishes the truth about completeness; an
             # earlier incremental truncation is no longer relevant.
             self._alerts_truncated = result.truncated
         else:
-            self._alert_cache.add(result.alerts)
+            self._alert_cache.add(result.alerts, fetched_at)
             # A truncated increment means alerts were missed, and the cache
             # cannot heal that by itself — the flag stays until the next full
             # query proves otherwise.
             self._alerts_truncated = self._alerts_truncated or result.truncated
 
         self._alerts_polled_at = now
-        self._alert_cache.prune(datetime.now(UTC))
+        self._alert_cache.prune(fetched_at)
 
     def _apply_alerts(self, data: CrowdSecData) -> None:
         """Derive the 24h numbers from the rolling window."""
@@ -710,7 +743,7 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
 
     def _report_truncation(self, truncated: bool) -> None:
         """Create a repair issue when the 24h numbers are incomplete."""
-        if truncated == self._truncation_reported:
+        if truncated is self._truncation_reported:
             return
         self._truncation_reported = truncated
         entry = self.config_entry
@@ -742,8 +775,8 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
         the user sees an empty ban table and nothing to explain it — with no
         hint that a bouncer key is all it takes.
         """
-        needed = getattr(self.client, "decisions_need_bouncer_key", False)
-        if needed == self._bouncer_key_reported:
+        needed = bool(getattr(self.client, "decisions_need_bouncer_key", False))
+        if needed is self._bouncer_key_reported:
             return
         self._bouncer_key_reported = needed
         entry = self.config_entry

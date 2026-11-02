@@ -102,8 +102,8 @@ export const deleteForIp = (
  * Everything the instance knows about one address or range.
  *
  * Deliberately a request of its own rather than a filter over the table: the
- * table is limited to the configured scope and cannot show a range covering
- * the address, which is the whole reason this exists.
+ * table holds local decisions only and cannot show a range covering the
+ * address, which is the whole reason this exists.
  */
 export const lookupIp = (
   hass: HomeAssistant,

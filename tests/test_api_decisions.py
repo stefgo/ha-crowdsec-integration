@@ -123,14 +123,18 @@ def test_without_a_key_nothing_is_sent(query):
     assert client.decision_requests == 0
 
 
-def test_a_404_falls_back_to_the_metric():
-    """Not every CrowdSec version answers an empty list with an empty array."""
+def test_a_404_means_no_decisions():
+    """Not every CrowdSec version answers an empty list with an empty array.
+
+    It is an answer, not a failure: the table has to empty, not keep showing
+    the rows of the last cycle.
+    """
 
     async def scenario():
         client = build_client(bouncer_api_key="key", session=FakeSession(404))
         return await client.async_get_decisions()
 
-    assert run(scenario) is None
+    assert run(scenario) == []
 
 
 @pytest.mark.parametrize("status", [401, 403])
@@ -178,6 +182,66 @@ def test_delete_targets_a_single_decision():
     assert calls == [("DELETE", "/v1/decisions/42")]
 
 
+def test_delete_by_address_filters_by_value_only():
+    """The delete route knows ``scopes``, not ``scope``, and refuses the latter.
+
+    ``value`` alone matches the decisions naming exactly this address, stored
+    as ``Ip`` or ``Range`` alike — and nothing that merely covers it.
+    """
+    calls: list[tuple] = []
+
+    async def scenario():
+        client = build_client()
+
+        async def fake_request(method, path, params=None, *args, **kwargs):
+            calls.append((method, path, params))
+            return {"nbDeleted": "2"}
+
+        client._async_lapi_request = fake_request  # type: ignore[assignment]
+        return await client.async_unban_ip("192.0.2.1")
+
+    assert run(scenario) == 2
+    assert calls == [("DELETE", "/v1/decisions", {"value": "192.0.2.1"})]
+
+
+def ban_payload(target: str) -> dict:
+    calls: list[tuple] = []
+
+    async def scenario():
+        client = build_client()
+
+        async def fake_request(method, path, params=None, payload=None, **kwargs):
+            calls.append((method, path, payload))
+            return None
+
+        client._async_lapi_request = fake_request  # type: ignore[assignment]
+        await client.async_ban_ip(target, "4h", "test")
+
+    run(scenario)
+    ((method, path, payload),) = calls
+    assert (method, path) == ("POST", "/v1/alerts")
+    (alert,) = payload
+    return alert
+
+
+def test_an_address_is_banned_with_the_ip_scope():
+    alert = ban_payload("192.0.2.1")
+    assert alert["source"]["scope"] == "Ip"
+    assert alert["decisions"][0]["scope"] == "Ip"
+
+
+def test_a_range_is_banned_with_the_range_scope():
+    """The scope ``cscli decisions add --range`` gives it, not ``Ip``."""
+    alert = ban_payload("10.0.0.0/24")
+    assert alert["source"]["scope"] == "Range"
+    assert alert["decisions"][0] == {
+        **alert["decisions"][0],
+        "scope": "Range",
+        "value": "10.0.0.0/24",
+        "duration": "4h",
+    }
+
+
 def test_deleted_count_reads_both_shapes():
     # CrowdSec sends the count as a string in some versions, as a number in
     # others — both mean the same thing.
@@ -186,6 +250,38 @@ def test_deleted_count_reads_both_shapes():
     assert _deleted_count({"nbDeleted": None}) == 0
     assert _deleted_count({}) == 0
     assert _deleted_count(None) == 0
+
+
+# -- Checking the key -------------------------------------------------------
+
+
+def test_the_key_is_checked_without_fetching_the_list():
+    """With a blocklist the list is huge; one address answers the question."""
+    session = FakeSession(body=None)
+
+    async def scenario():
+        client = build_client(bouncer_api_key="key", session=session)
+        forbid_machine_token(client)
+        await client.async_check_bouncer_key()
+        return client
+
+    client = run(scenario)
+    (request,) = session.requests
+    assert request["params"] == {"ip": "192.0.2.1"}
+    assert request["headers"]["X-Api-Key"] == "key"
+    # A candidate key says nothing about the running entry's key.
+    assert client.decisions_need_bouncer_key is False
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_a_rejected_key_fails_the_check(status):
+    async def scenario():
+        client = build_client(bouncer_api_key="wrong", session=FakeSession(status))
+        await client.async_check_bouncer_key()
+
+    with pytest.raises(CrowdSecAuthError) as err:
+        run(scenario)
+    assert err.value.endpoint == ENDPOINT_BOUNCER
 
 
 # -- Restricting to origins -------------------------------------------------
@@ -230,7 +326,7 @@ def test_a_range_is_looked_up_as_a_range():
     assert lookup_params("10.0.0.0/24") == {"range": "10.0.0.0/24", "contains": "true"}
 
 
-def test_a_lookup_ignores_the_configured_scope():
+def test_a_lookup_asks_every_origin():
     """The question is whether the address is blocked at all, by anyone."""
     assert "origins" not in lookup_params("192.0.2.1")
 

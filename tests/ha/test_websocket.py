@@ -154,6 +154,39 @@ async def test_a_local_decision_can_be_removed(hass, ws, loaded_entry, fake_clie
     assert "total" in result["result"]
 
 
+async def test_two_unbans_in_a_row_both_show_their_effect(
+    hass, ws, loaded_entry, fake_client
+):
+    """The answer is read after the delete, not left to a debounced refresh.
+
+    The second click falls into the cooldown of Home Assistant's refresh
+    debouncer; waiting for that refresh would hand back the row just removed.
+    """
+    fake_client.decisions = [
+        make_decision(1, ip="192.0.2.11"),
+        make_decision(2, ip="192.0.2.12"),
+    ]
+    await loaded_entry.runtime_data.async_refresh()
+
+    values = []
+    for decision_id, remaining in ((1, [2]), (2, [])):
+        fake_client.decisions = [
+            make_decision(left, ip=f"192.0.2.1{left}") for left in remaining
+        ]
+        result = await send(
+            ws,
+            {
+                "type": WS_DECISIONS_DELETE,
+                "config_entry_id": loaded_entry.entry_id,
+                "decision_id": decision_id,
+            },
+        )
+        assert result["success"]
+        values.append([row["value"] for row in result["result"]["decisions"]])
+
+    assert values == [["192.0.2.12"], []]
+
+
 async def test_a_central_address_is_refused(hass, ws, loaded_entry, fake_client):
     """Deleting it locally would only last until the next pull.
 
@@ -198,10 +231,63 @@ async def test_an_address_with_one_local_decision_may_go(
     )
 
     assert result["success"]
+    assert result["result"]["deleted"] == 1
+    # Only the local one, by its ID — the CAPI decision for the same address
+    # would come back with the next pull anyway.
+    assert fake_client.deleted_ids == [6]
+    assert fake_client.unbanned == []
+
+
+async def test_every_local_decision_of_the_address_goes(
+    hass, ws, loaded_entry, fake_client
+):
+    fake_client.lookup_decisions = [
+        make_decision(7, ip="192.0.2.41", origin="crowdsec"),
+        make_decision(8, ip="192.0.2.41", origin="cscli"),
+    ]
+
+    result = await send(
+        ws,
+        {
+            "type": WS_DECISIONS_DELETE,
+            "config_entry_id": loaded_entry.entry_id,
+            "ip": "192.0.2.41",
+        },
+    )
+
+    assert result["success"]
+    assert result["result"]["deleted"] == 2
+    assert fake_client.deleted_ids == [7, 8]
+
+
+async def test_a_covering_local_range_is_not_the_address(
+    hass, ws, loaded_entry, fake_client
+):
+    """A /24 covering the address is a decision about the range.
+
+    The lookup card offers that one as a row of its own; "all decisions for
+    this address" must not take the whole range with it.
+    """
+    fake_client.lookup_decisions = [
+        {**make_decision(9, ip="192.0.2.0/24", origin="cscli"), "scope": "Range"},
+    ]
+
+    result = await send(
+        ws,
+        {
+            "type": WS_DECISIONS_DELETE,
+            "config_entry_id": loaded_entry.entry_id,
+            "ip": "192.0.2.42",
+        },
+    )
+
+    assert not result["success"]
+    assert result["error"]["code"] == "not_deletable"
+    assert fake_client.deleted_ids == []
 
 
 async def test_an_unknown_address_is_not_refused(hass, ws, loaded_entry, fake_client):
-    """Nothing found means nothing to protect — let the LAPI have the last word."""
+    """Nothing found means nothing to protect, and nothing to delete either."""
     fake_client.lookup_decisions = []
 
     result = await send(
@@ -214,6 +300,8 @@ async def test_an_unknown_address_is_not_refused(hass, ws, loaded_entry, fake_cl
     )
 
     assert result["success"]
+    assert result["result"]["deleted"] == 0
+    assert fake_client.deleted_ids == []
 
 
 async def test_an_unreadable_address_is_refused(hass, ws, loaded_entry, fake_client):
@@ -224,7 +312,7 @@ async def test_an_unreadable_address_is_refused(hass, ws, loaded_entry, fake_cli
     """
     fake_client.lookup_decisions = None
 
-    with patch.object(fake_client, "async_unban_ip", AsyncMock()) as unban:
+    with patch.object(fake_client, "async_delete_decision", AsyncMock()) as delete:
         result = await send(
             ws,
             {
@@ -236,7 +324,7 @@ async def test_an_unreadable_address_is_refused(hass, ws, loaded_entry, fake_cli
 
     assert not result["success"]
     assert result["error"]["code"] == "decisions_unavailable"
-    unban.assert_not_awaited()
+    delete.assert_not_awaited()
 
 
 async def test_a_malformed_address_is_refused(ws, loaded_entry):

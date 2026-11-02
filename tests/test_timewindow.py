@@ -39,7 +39,25 @@ def test_window_params_omit_until_for_the_newest_window():
 
 
 def test_window_params_with_until():
-    assert window_params(Window(1440, 720)) == {"since": "1440m", "until": "720m"}
+    # One minute into the newer half, so the two halves overlap.
+    assert window_params(Window(1440, 720)) == {"since": "1440m", "until": "719m"}
+
+
+def test_the_halves_of_a_split_overlap():
+    """The halves are asked one after the other, against a moving "now".
+
+    Without an overlap the alerts that started between the two requests fall
+    into neither half; the duplicates an overlap produces go by alert ID.
+    """
+    older, newer = split_window(Window(1440, 0))
+    older_until = int(window_params(older)["until"].rstrip("m"))
+    newer_since = int(window_params(newer)["since"].rstrip("m"))
+
+    assert older_until < newer_since
+
+
+def test_an_overlap_reaching_now_drops_until():
+    assert window_params(Window(2, 1)) == {"since": "2m"}
 
 
 def test_split_halves_a_window():

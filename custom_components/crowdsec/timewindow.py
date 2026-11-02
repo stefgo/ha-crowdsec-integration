@@ -14,6 +14,13 @@ from typing import NamedTuple
 # 60 seconds than the limit allows, only a higher limit helps.
 MIN_WINDOW_MINUTES = 1
 
+# How far the end of an older window reaches into the next one. ``since`` and
+# ``until`` are counted back from the moment the LAPI answers, and the two
+# halves of a split are asked one after the other: without an overlap the
+# alerts that started in between fall into neither. The duplicates the overlap
+# produces are dropped by alert ID.
+SPLIT_OVERLAP_MINUTES = 1
+
 
 class Window(NamedTuple):
     """A half-open period, counted in minutes backwards from now.
@@ -53,11 +60,14 @@ def window_params(window: Window) -> dict[str, str]:
     """Query parameters for ``/v1/alerts``.
 
     ``until`` is omitted for the most recent window — otherwise alerts that
-    arrive between two partial queries would be missing.
+    arrive between two partial queries would be missing. For an older window it
+    reaches :data:`SPLIT_OVERLAP_MINUTES` into the next one, and once that
+    leaves nothing between it and now, it is dropped as well.
     """
     params = {"since": f"{window.start}m"}
-    if window.end > 0:
-        params["until"] = f"{window.end}m"
+    until = window.end - SPLIT_OVERLAP_MINUTES
+    if until > 0:
+        params["until"] = f"{until}m"
     return params
 
 

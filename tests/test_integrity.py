@@ -134,3 +134,27 @@ def test_websocket_commands_are_namespaced():
         const.WS_DECISIONS_DELETE,
     ):
         assert command.startswith(f"{const.DOMAIN}/")
+
+
+# The one code that is not translated on purpose: its message carries what the
+# LAPI said, and a fixed sentence in its place would hide the reason.
+UNTRANSLATED_ERRORS = {"request_failed"}
+
+
+def test_every_websocket_error_has_a_card_text():
+    """The cards say an error in the user's language by its code.
+
+    A code the card does not know falls back to the English message from the
+    server — or, worse, a code reused for a second purpose keeps a text that
+    no longer fits, as "No decision was selected" did for a mistyped address.
+    """
+    source = (COMPONENT / "websocket_api.py").read_text(encoding="utf-8")
+    codes = set(re.findall(r'send_error\(\s*msg\["id"\],\s*"([a-z_]+)"', source))
+    assert codes, "no error codes found — has the call changed shape?"
+
+    card = (COMPONENT.parents[1] / "card" / "src" / "localize.ts").read_text(
+        encoding="utf-8"
+    )
+    texts = set(re.findall(r'"error\.([a-z_]+)":', card))
+
+    assert codes - UNTRANSLATED_ERRORS <= texts

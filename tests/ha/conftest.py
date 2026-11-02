@@ -66,12 +66,22 @@ def metrics() -> MetricSet:
     return MetricSet(parse_prometheus(METRICS_TEXT))
 
 
+def go_duration(seconds: float) -> str:
+    """Seconds in the shape Go prints a duration, e.g. ``-12h40m0s``."""
+    sign = "-" if seconds < 0 else ""
+    rest = round(abs(seconds))
+    hours, rest = divmod(rest, 3600)
+    minutes, secs = divmod(rest, 60)
+    return f"{sign}{hours}h{minutes}m{secs}s"
+
+
 def make_alert(
     alert_id: int = 1,
     ip: str = "192.0.2.10",
     scenario: str = "crowdsecurity/ssh-bf",
     minutes_ago: int = 1,
     ban: bool = True,
+    ban_hours: float = 4,
 ) -> dict[str, Any]:
     """One alert in the shape the LAPI returns it.
 
@@ -79,8 +89,13 @@ def make_alert(
     window and drops what falls out of it, so a fixed date would make these
     tests pass until that date is a day old and then fail for reasons that have
     nothing to do with the code.
+
+    The decision's ``duration`` is the time left right now, as CrowdSec reports
+    it — negative once a ban of ``ban_hours`` has run out.
     """
-    created = datetime.now(UTC) - timedelta(minutes=minutes_ago)
+    now = datetime.now(UTC)
+    created = now - timedelta(minutes=minutes_ago)
+    left = (created + timedelta(hours=ban_hours) - now).total_seconds()
     return {
         "id": alert_id,
         "created_at": created.isoformat().replace("+00:00", "Z"),
@@ -91,7 +106,7 @@ def make_alert(
                 {
                     "id": alert_id * 100,
                     "type": "ban" if ban else "captcha",
-                    "duration": "4h",
+                    "duration": go_duration(left),
                     "value": ip,
                     "scope": "Ip",
                     "origin": "crowdsec",
@@ -148,7 +163,7 @@ class FakeClient:
         self.decision_requests = 0
         self.bouncer_decision_requests = 0
         # The lookup path is separate from the table: it goes to the LAPI
-        # per request and ignores the configured scope.
+        # per request and covers every origin, not only the local ones.
         self.lookup_decisions: list[dict[str, Any]] | None = []
         self.lookup_alerts: list[dict[str, Any]] = []
         self.lookup_queries: list[str] = []
@@ -156,6 +171,9 @@ class FakeClient:
         self.lookup_alerts_error: Exception | None = None
         self.bans: list[tuple[str, str, str]] = []
         self.ban_error: Exception | None = None
+        # What the delete routes were asked to remove, in order.
+        self.deleted_ids: list[int] = []
+        self.unbanned: list[str] = []
         self._AlertResult = AlertResult
 
     async def async_get_metrics(self) -> MetricSet:
@@ -196,9 +214,11 @@ class FakeClient:
         return None
 
     async def async_unban_ip(self, ip):
+        self.unbanned.append(ip)
         return 1
 
     async def async_delete_decision(self, decision_id):
+        self.deleted_ids.append(decision_id)
         return 1
 
 

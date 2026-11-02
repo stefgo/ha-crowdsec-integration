@@ -77,6 +77,11 @@ compares against to spot stale values.
   the evaluation is unchanged. `alerts_truncated` is remembered rather than
   recomputed: a truncated increment means alerts were missed, and only a full
   query can clear it.
+- **An alert's decision `duration` is the time left, not the ban length.**
+  CrowdSec computes it as `until - now` at the moment of the query, negative
+  once the ban is over. The cache stamps every alert with its fetch time
+  (`alerts.FETCHED_AT`), and `history_from_alerts` counts the expiry from
+  there. Counting it from `created_at` put expired bans hours too early.
 - **No LAPI pagination.** `/v1/alerts` silently truncates at `limit`. The client
   halves the window and re-queries, up to `MAX_WINDOW_SPLITS` (4) levels deep;
   still truncated means a repair issue and `alerts_truncated`.
@@ -97,13 +102,26 @@ compares against to spot stale values.
   check as a safety net; the LAPI cannot look a decision up by id. Without a
   bouncer key the lookup has nothing to show, and the guard refuses
   (`decisions_unavailable`) rather than letting the delete through unchecked.
+- **The cards unban an address by ID, the service by value.** The card's
+  "remove all decisions for this address" deletes the IDs from
+  `IpReport.own_local_ids()` one by one: local, active, naming the address
+  itself. Deleting by value would take a CAPI decision for the same address
+  with it, and a covering range is a row of its own. The `unban_ip` service
+  keeps its documented meaning and deletes by `value=` — the delete route
+  knows `scopes` but refuses `scope` outright.
+- **After a ban or an unban only the table is re-read.**
+  `async_refresh_decisions` fetches the decision list, rebuilds the table from
+  it and the cached alerts and publishes it with `async_set_updated_data`.
+  `async_request_refresh` is debounced, so a second click within its cooldown
+  answered with the row it had just removed; a full cycle would also count as
+  an interval for every idle and silence counter.
 - **The decision list is read with the bouncer key, never the machine token.**
   CrowdSec routes `GET /v1/decisions` through its API-key middleware in every
   version; machines may only delete there. Asking with the token earns a 403,
   a needless re-login and an "API key not found" line in the CrowdSec log per
   cycle (#33). Without a key nothing is sent: `decisions_need_bouncer_key`
   raises the repair and the `cs_active_decisions` metric supplies the count.
-  A 404 with the key is normal on some versions and means the same.
+  A 404 with the key is normal on some versions and means an empty list.
 - **Bouncers are counted per bouncer, not via the route metric.**
   `cs_lapi_route_requests_total` counts the integration's own `/v1/decisions`
   query like a bouncer's, so the sum never fell to zero while Home Assistant

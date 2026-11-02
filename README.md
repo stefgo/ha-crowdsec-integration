@@ -210,7 +210,8 @@ Clicking a row opens the details — every raw field of the decision plus the
 alert context. The search box works over address, scenario, operator, country,
 origin, type and scope; several words all have to match but may sit in
 different fields, so `de ssh` finds the German SSH bruteforcers. The chips
-filter by status, origin, type and scope; column headers sort.
+filter by status, type and scope, and *Unbannable* narrows the list to the
+rows the card can remove; column headers sort.
 
 The card speaks **German and English** and follows the language set in the
 Home Assistant profile; anything else falls back to English. Error messages
@@ -300,8 +301,9 @@ Two things are deliberately different from the table:
 **Ban and unban** sit below the answer, next to the per-row unban in the table. *Ban* takes a duration and a reason,
 prefilled from the card configuration, and confirms before acting; the fresh
 result comes straight back, so the click shows its own effect. *Remove all
-decisions* appears only when something local is actually there to remove — a
-decision from the CAPI or a blocklist has no button and says why. After an
+decisions* appears only when a local decision names the address itself — a
+decision from the CAPI or a blocklist has no button and says why, and a local
+range covering the address is removed through its own row. After an
 unban the card asks again instead of trusting the delete count: a covering
 range can still be in force once the address's own ban is gone.
 
@@ -339,7 +341,8 @@ hide_ban: false
 All three expect the instance as `config_entry_id`. `ip` takes a single address
 or a CIDR range, `duration` the Go duration format (`30m`, `4h`, `1h30m`);
 there is no day unit, so a day is `24h`. After a ban
-and an unban the integration refreshes the values by itself.
+and an unban the integration re-reads the ban table by itself; the sensors
+follow with the next poll.
 
 ```yaml
 action:

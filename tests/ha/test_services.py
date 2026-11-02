@@ -14,6 +14,8 @@ from custom_components.crowdsec.const import (
     SERVICE_UNBAN_IP,
 )
 
+from .conftest import make_decision
+
 
 async def call(hass, service, data):
     await hass.services.async_call(DOMAIN, service, data, blocking=True)
@@ -139,6 +141,25 @@ async def test_unban_reports_what_the_lapi_removed(
     )
 
     assert seen["ip"] == "192.0.2.55"
+
+
+async def test_an_unban_rereads_the_table_without_a_cycle(
+    hass, loaded_entry, fake_client
+):
+    """The table shows the effect at once; the counters wait for the interval."""
+    fake_client.decisions = [make_decision(1, ip="192.0.2.56")]
+    await loaded_entry.runtime_data.async_refresh()
+    alerts_before = len(fake_client.alert_queries)
+
+    fake_client.decisions = []
+    await call(
+        hass,
+        SERVICE_UNBAN_IP,
+        {"config_entry_id": loaded_entry.entry_id, "ip": "192.0.2.56"},
+    )
+
+    assert loaded_entry.runtime_data.data.decisions == []
+    assert len(fake_client.alert_queries) == alerts_before
 
 
 async def test_an_api_error_becomes_a_readable_message(

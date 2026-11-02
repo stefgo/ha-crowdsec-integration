@@ -19,8 +19,8 @@ from .decisions import parse_go_duration
 def normalize_ip_target(raw: str) -> str:
     """Check an address or a CIDR range and return it in normal form.
 
-    CrowdSec uses the scope ``Ip`` for both a single address and a range, so
-    both are allowed here. The check goes through :mod:`ipaddress` rather than
+    Both a single address and a CIDR range are allowed here; the client
+    gives them the scopes ``Ip`` and ``Range`` the way ``cscli`` does. The check goes through :mod:`ipaddress` rather than
     a pattern: a regular expression over the character set of an address lets
     ``1.2.3.4.5``, ``::::`` and a ``/999`` prefix through, and those only fail
     later at the LAPI — with an error message that says nothing about what was

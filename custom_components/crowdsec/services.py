@@ -76,8 +76,8 @@ def _coordinator(hass: HomeAssistant, call: ServiceCall):
 def _validated_ip(call: ServiceCall) -> str:
     """Validate the target address before it goes to the LAPI.
 
-    Single addresses and CIDR ranges are both allowed — CrowdSec uses the
-    scope "Ip" for both.
+    Single addresses and CIDR ranges are both allowed; a range is banned with
+    the scope "Range", as ``cscli decisions add --range`` does.
     """
     raw = str(call.data[ATTR_IP])
     try:
@@ -133,7 +133,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
         except (CrowdSecAuthError, CrowdSecConnectionError) as err:
             raise _wrap_api_error(err) from err
         _LOGGER.info("Banned %s (%s)", ip, duration)
-        await coordinator.async_request_refresh()
+        await coordinator.async_refresh_decisions()
 
     async def async_unban(call: ServiceCall) -> None:
         coordinator = _coordinator(hass, call)
@@ -143,7 +143,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
         except (CrowdSecAuthError, CrowdSecConnectionError) as err:
             raise _wrap_api_error(err) from err
         _LOGGER.info("Deleted %d decision(s) for %s", deleted, ip)
-        await coordinator.async_request_refresh()
+        await coordinator.async_refresh_decisions()
 
     async def async_refresh(call: ServiceCall) -> None:
         coordinator = _coordinator(hass, call)

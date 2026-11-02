@@ -17,13 +17,14 @@ active decisions and additionally contribute the expired ones.
 
 from __future__ import annotations
 
+import ipaddress
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from .alerts import alert_timestamp, parse_timestamp, source_value
+from .alerts import FETCHED_AT, alert_timestamp, parse_timestamp, source_value
 from .const import (
     DECISION_STATUS_ACTIVE,
     DECISION_STATUS_EXPIRED,
@@ -36,6 +37,10 @@ from .const import (
 # A Go duration as CrowdSec writes it: "3h59m58.5s", "-1h30m", "168h0m0s".
 # The sign belongs to the whole value — an expired decision counts backwards.
 _DURATION_PART = re.compile(r"(\d+(?:\.\d+)?)([a-zµ]+)")
+# The whole value has to consist of such parts. ``findall`` alone skips
+# whatever does not match, which let "1h30" (a number without its unit) and
+# "4h xyz" through as four hours — and the LAPI then rejected them.
+_DURATION_WHOLE = re.compile(r"(?:\d+(?:\.\d+)?[a-zµ]+)+")
 _DURATION_UNITS = {
     "ns": 1e-9,
     "us": 1e-6,
@@ -72,9 +77,9 @@ def parse_go_duration(raw: Any) -> float | None:
         sign = -1.0 if body[0] == "-" else 1.0
         body = body[1:]
 
-    matches = _DURATION_PART.findall(body)
-    if not matches:
+    if not _DURATION_WHOLE.fullmatch(body):
         return None
+    matches = _DURATION_PART.findall(body)
 
     total = 0.0
     for amount, unit in matches:
@@ -85,6 +90,21 @@ def parse_go_duration(raw: Any) -> float | None:
             return None
         total += float(amount) * factor
     return sign * total
+
+
+def _canonical_address(value: str) -> str:
+    """One spelling per address or range, so two notations compare equal.
+
+    IPv6 in particular has many ways to write the same address; a value that
+    is not an address at all is compared as it stands.
+    """
+    text = value.strip()
+    try:
+        if "/" in text:
+            return str(ipaddress.ip_network(text, strict=False))
+        return str(ipaddress.ip_address(text))
+    except ValueError:
+        return text
 
 
 def origin_kind(origin: str | None) -> str:
@@ -311,6 +331,12 @@ def history_from_alerts(
     The active decisions are passed in so their addresses can be skipped: a ban
     that is still running is already in the table with live data, and a second
     row from the alert history would only duplicate it.
+
+    The ``duration`` of an alert's decision is the time that was left when the
+    alert was fetched — negative once the ban is over — not the length of the
+    ban. The expiry is therefore counted from the fetch time the alert cache
+    stored (:data:`~.alerts.FETCHED_AT`), and from ``now`` for an alert that
+    comes straight from the LAPI.
     """
     covered = {record.value for record in active if record.value}
     history: list[DecisionRecord] = []
@@ -321,6 +347,7 @@ def history_from_alerts(
             continue
 
         created = alert_timestamp(alert)
+        fetched = parse_timestamp(alert.get(FETCHED_AT)) or now
         country = _source_field(alert, "cn")
         as_name = _source_field(alert, "as_name")
         as_number = _source_field(alert, "as_number")
@@ -336,9 +363,7 @@ def history_from_alerts(
             duration = _text(decision.get("duration"))
             seconds = parse_go_duration(duration)
             until = (
-                created + timedelta(seconds=seconds)
-                if (created is not None and seconds is not None)
-                else None
+                fetched + timedelta(seconds=seconds) if seconds is not None else None
             )
             if until is not None and until > now:
                 # Still running, but not in the decision list — the LAPI query
@@ -448,7 +473,9 @@ class IpReport:
     # naming it. Without this the card would show a row whose value is not
     # what was searched for and leave the reader guessing.
     covering_ranges: list[str] = field(default_factory=list)
-    # Whether anything here can be lifted from Home Assistant at all.
+    # Whether "remove all decisions for this address" has anything to remove:
+    # a local decision naming the address itself (see ``own_local_ids``). A
+    # local range covering it is lifted through its own row instead.
     deletable: bool = False
 
     alerts: int = 0
@@ -460,6 +487,25 @@ class IpReport:
     # The alert query is allowed to fail on its own — the decisions are the
     # answer, the history is the context.
     alerts_available: bool = True
+
+    def own_local_ids(self) -> list[int]:
+        """IDs of the local decisions that name the target itself.
+
+        This is what "remove all decisions for this address" may touch. A
+        decision from the CAPI or a blocklist for the same address would come
+        back with the next pull, and a range that merely covers the address is
+        a decision about the range — the lookup card offers that one as a row
+        of its own.
+        """
+        target = _canonical_address(self.target)
+        return [
+            record.decision_id
+            for record in self.decisions
+            if record.deletable
+            and record.decision_id is not None
+            and record.value is not None
+            and _canonical_address(record.value) == target
+        ]
 
     def as_dict(self) -> dict[str, Any]:
         """JSON-serialisable form for the WebSocket answer."""
@@ -505,9 +551,9 @@ def build_ip_report(
         target=target,
         decisions=active,
         blocked=bool(active),
-        deletable=any(record.deletable for record in active),
         alerts_available=alerts_available,
     )
+    report.deletable = bool(report.own_local_ids())
 
     if active:
         longest = active[0]

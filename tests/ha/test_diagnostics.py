@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from custom_components.crowdsec.api import CrowdSecConnectionError
 from custom_components.crowdsec.diagnostics import (
     _redact_host,
     async_get_config_entry_diagnostics,
 )
+from custom_components.crowdsec.metrics import MetricSet, parse_prometheus
 
-from .conftest import make_alert, make_decision
+from .conftest import METRICS_TEXT, make_alert, make_decision
 
 
 async def test_the_secrets_are_gone(hass, loaded_entry):
@@ -90,6 +92,47 @@ async def test_the_raw_metrics_are_included(hass, loaded_entry):
     result = await async_get_config_entry_diagnostics(hass, loaded_entry)
 
     assert "cs_active_decisions" in result["metrics"]
+
+
+async def test_the_machine_name_is_gone_from_the_metrics(
+    hass, loaded_entry, fake_client
+):
+    """CrowdSec labels the per-machine counter with the redacted machine ID."""
+    text = (
+        METRICS_TEXT
+        + 'cs_lapi_machine_requests_total{machine="hass",route="/v1/alerts",'
+        'method="GET"} 12\n'
+    )
+    fake_client.metrics_fn = lambda: MetricSet(parse_prometheus(text))
+    await loaded_entry.runtime_data.async_refresh()
+
+    result = await async_get_config_entry_diagnostics(hass, loaded_entry)
+
+    (sample,) = result["metrics"]["cs_lapi_machine_requests_total"]
+    assert sample["labels"] == {
+        "machine": "**REDACTED**",
+        "route": "/v1/alerts",
+        "method": "GET",
+    }
+    assert sample["value"] == 12
+
+
+async def test_the_host_is_gone_from_the_error_texts(hass, loaded_entry, fake_client):
+    """An error quotes the URL it failed on — the host the config redacts."""
+    fake_client.alerts_error = CrowdSecConnectionError(
+        "LAPI /v1/alerts failed: Cannot connect to host LOCALHOST:8080 ssl:default"
+    )
+    await loaded_entry.runtime_data.async_refresh()
+
+    result = await async_get_config_entry_diagnostics(hass, loaded_entry)
+    data = result["data"]
+
+    assert data["errors"] == [
+        "LAPI /v1/alerts failed: Cannot connect to host **REDACTED**:8080 ssl:default"
+    ]
+    assert data["problem_reasons"][0] == data["errors"][0]
+    assert data["problems"][0]["text"] == data["errors"][0]
+    assert "localhost" not in str(result).lower()
 
 
 def test_redacting_a_host_keeps_scheme_port_and_path():

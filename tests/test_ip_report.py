@@ -144,3 +144,50 @@ def test_the_answer_is_json_serialisable():
     assert isinstance(data["seconds_left"], int)
     assert data["expires_at"].startswith("2026-08-15T16:00")
     assert len(data["decisions"]) == 1
+
+
+def test_own_local_ids_name_the_address_itself():
+    """Only what "all decisions for this address" may remove."""
+    report = build_ip_report(
+        "192.0.2.10",
+        [
+            decision("192.0.2.10", origin="crowdsec", decision_id=1),
+            decision("192.0.2.10", origin="cscli", decision_id=2),
+            # Comes back with the next pull — not ours to delete.
+            decision("192.0.2.10", origin="CAPI", decision_id=3),
+            # A decision about the range, not about the address.
+            decision("192.0.2.0/24", origin="cscli", decision_id=4),
+            # Already over.
+            decision("192.0.2.10", origin="cscli", duration="-1m", decision_id=5),
+        ],
+        [],
+        NOW,
+    )
+
+    assert report.own_local_ids() == [1, 2]
+
+
+def test_own_local_ids_compare_ipv6_by_meaning():
+    """The same address in two spellings is still the same address."""
+    report = build_ip_report(
+        "2001:db8::1",
+        [decision("2001:0DB8:0:0::1", origin="cscli", decision_id=7)],
+        [],
+        NOW,
+    )
+
+    assert report.own_local_ids() == [7]
+
+
+def test_a_covering_local_range_does_not_make_the_address_deletable():
+    """ "Remove all for this address" would find nothing of its own to remove.
+
+    The range is local and can go — through its own row, which says so.
+    """
+    report = build_ip_report(
+        "192.0.2.10", [decision("192.0.2.0/24", origin="cscli")], [], NOW
+    )
+
+    assert report.blocked is True
+    assert report.deletable is False
+    assert report.decisions[0].deletable is True

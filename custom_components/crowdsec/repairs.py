@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import voluptuous as vol
 from homeassistant.components.repairs import RepairsFlow
+from homeassistant.const import CONF_VERIFY_SSL
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.selector import (
@@ -54,9 +55,11 @@ class BouncerKeyRepairFlow(RepairsFlow):
                 **entry.data,
                 CONF_BOUNCER_API_KEY: user_input[CONF_BOUNCER_API_KEY],
             }
-            client = build_client(self.hass, data, entry.data.get("verify_ssl", True))
+            client = build_client(
+                self.hass, data, entry.data.get(CONF_VERIFY_SSL, True)
+            )
             try:
-                await client.async_get_active_decision_count()
+                await client.async_check_bouncer_key()
             except CrowdSecAuthError as err:
                 errors["base"] = "invalid_auth_bouncer"
                 detail = str(err)
