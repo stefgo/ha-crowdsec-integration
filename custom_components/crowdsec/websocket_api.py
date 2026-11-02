@@ -272,7 +272,7 @@ async def ws_decisions_delete(
         deleted,
         f"id {decision_id}" if decision_id is not None else str(ip),
     )
-    await coordinator.async_request_refresh()
+    await coordinator.async_refresh_decisions()
 
     # Only the first page comes back: after a delete the card redraws from the
     # top anyway, and the answer must not be the one place that still ships the
@@ -395,7 +395,7 @@ async def ws_ip_ban(
         return
 
     _LOGGER.info("Banned %s for %s via the card (%s)", target, duration, reason)
-    await coordinator.async_request_refresh()
+    await coordinator.async_refresh_decisions()
 
     # The fresh state comes straight back, so the card can show the result of
     # the click without a second round trip. Deliberately not allowed to fail

@@ -339,7 +339,8 @@ hide_ban: false
 All three expect the instance as `config_entry_id`. `ip` takes a single address
 or a CIDR range, `duration` the Go duration format (`30m`, `4h`, `1h30m`);
 there is no day unit, so a day is `24h`. After a ban
-and an unban the integration refreshes the values by itself.
+and an unban the integration re-reads the ban table by itself; the sensors
+follow with the next poll.
 
 ```yaml
 action:

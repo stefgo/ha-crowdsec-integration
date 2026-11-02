@@ -27,6 +27,9 @@ Nothing inside an HTML comment is published.
   expiry was off by the age of the alert, so a ban from the morning could
   appear to have ended before it even started, and the expired rows were
   sorted accordingly.
+- **The ban table shows the effect of every ban and unban at once.** A second
+  click within a few seconds of the first used to come back with the row it
+  had just removed.
 
 ### Changed
 

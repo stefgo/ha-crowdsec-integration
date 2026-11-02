@@ -154,6 +154,39 @@ async def test_a_local_decision_can_be_removed(hass, ws, loaded_entry, fake_clie
     assert "total" in result["result"]
 
 
+async def test_two_unbans_in_a_row_both_show_their_effect(
+    hass, ws, loaded_entry, fake_client
+):
+    """The answer is read after the delete, not left to a debounced refresh.
+
+    The second click falls into the cooldown of Home Assistant's refresh
+    debouncer; waiting for that refresh would hand back the row just removed.
+    """
+    fake_client.decisions = [
+        make_decision(1, ip="192.0.2.11"),
+        make_decision(2, ip="192.0.2.12"),
+    ]
+    await loaded_entry.runtime_data.async_refresh()
+
+    values = []
+    for decision_id, remaining in ((1, [2]), (2, [])):
+        fake_client.decisions = [
+            make_decision(left, ip=f"192.0.2.1{left}") for left in remaining
+        ]
+        result = await send(
+            ws,
+            {
+                "type": WS_DECISIONS_DELETE,
+                "config_entry_id": loaded_entry.entry_id,
+                "decision_id": decision_id,
+            },
+        )
+        assert result["success"]
+        values.append([row["value"] for row in result["result"]["decisions"]])
+
+    assert values == [["192.0.2.12"], []]
+
+
 async def test_a_central_address_is_refused(hass, ws, loaded_entry, fake_client):
     """Deleting it locally would only last until the next pull.
 

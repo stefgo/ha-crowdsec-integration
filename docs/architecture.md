@@ -109,6 +109,12 @@ compares against to spot stale values.
   with it, and a covering range is a row of its own. The `unban_ip` service
   keeps its documented meaning and deletes by `value=` — the delete route
   knows `scopes` but refuses `scope` outright.
+- **After a ban or an unban only the table is re-read.**
+  `async_refresh_decisions` fetches the decision list, rebuilds the table from
+  it and the cached alerts and publishes it with `async_set_updated_data`.
+  `async_request_refresh` is debounced, so a second click within its cooldown
+  answered with the row it had just removed; a full cycle would also count as
+  an interval for every idle and silence counter.
 - **The decision list is read with the bouncer key, never the machine token.**
   CrowdSec routes `GET /v1/decisions` through its API-key middleware in every
   version; machines may only delete there. Asking with the token earns a 403,
