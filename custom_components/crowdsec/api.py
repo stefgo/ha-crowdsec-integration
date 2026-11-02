@@ -150,9 +150,9 @@ class CrowdSecClient:
         self._token: str | None = None
         self._token_expires: datetime | None = None
         self._login_lock = asyncio.Lock()
-        # Set when the decision list cannot be read and a bouncer key would be
-        # the way out. The coordinator turns it into a repair issue — this
-        # module stays free of Home Assistant imports.
+        # Set when the decision list was asked for without a bouncer key, the
+        # only credential the LAPI hands it to. The coordinator turns it into
+        # a repair issue — this module stays free of Home Assistant imports.
         self.decisions_need_bouncer_key = False
         # The integration's own requests to the decision routes. CrowdSec
         # counts them in ``cs_lapi_route_requests_total`` like any bouncer's;
@@ -286,15 +286,11 @@ class CrowdSecClient:
         params: dict[str, str] | None = None,
         payload: Any = None,
         endpoint: str = ENDPOINT_ALERTS,
-        none_on_404: bool = False,
     ) -> Any:
         """Request to the LAPI with machine auth, retried once on a 401.
 
         ``endpoint`` names the access path in an auth error — the coordinator
-        decides per path whether the outage blocks the entry. With
-        ``none_on_404`` a 404 counts as "this route does not exist here"
-        instead of an error; older CrowdSec versions do not serve every route
-        to a machine token.
+        decides per path whether the outage blocks the entry.
         """
         for attempt in range(2):
             token = await self._async_token(force=attempt > 0)
@@ -320,8 +316,6 @@ class CrowdSecClient:
                             f"(HTTP {response.status}): {body.strip()[:200]}",
                             endpoint,
                         )
-                    if response.status == 404 and none_on_404:
-                        return None
                     if response.status not in (200, 201):
                         body = await response.text()
                         raise CrowdSecConnectionError(
@@ -501,9 +495,7 @@ class CrowdSecClient:
     ) -> list[dict[str, Any]] | None:
         """Active decisions, the way ``cscli decisions list`` sees them.
 
-        The machine token is asked first — it is always configured, whereas the
-        bouncer key is optional. Only if the LAPI denies the route to a machine
-        does the bouncer key take over. ``None`` means neither path works; the
+        Needs the bouncer key. ``None`` means there is no list to be had; the
         caller then falls back to the ``cs_active_decisions`` metric, which
         knows the count but no details.
 
@@ -532,50 +524,20 @@ class CrowdSecClient:
     async def _async_decisions(
         self, params: dict[str, str] | None
     ) -> list[dict[str, Any]] | None:
-        """A decision query with the full fallback chain.
+        """A decision query, with the bouncer key or not at all.
 
-        The machine token is asked first — it is always configured, whereas the
-        bouncer key is optional. Only if the LAPI denies the route to a machine
-        does the bouncer key take over.
+        ``GET /v1/decisions`` is a bouncer route in every CrowdSec version: the
+        LAPI only lets machines delete decisions there, never read them. Asking
+        with the machine token anyway costs a refused request, a needless
+        re-login and an "API key not found" line in the CrowdSec log on every
+        cycle. Without a key nothing is sent; the flag lets the coordinator
+        offer the repair that asks for one.
         """
-        try:
-            data = await self._async_lapi_request(
-                "GET",
-                "/v1/decisions",
-                params,
-                endpoint=ENDPOINT_DECISIONS,
-                none_on_404=True,
-            )
-        except CrowdSecAuthError as err:
-            if self._bouncer_api_key is not None:
-                _LOGGER.debug(
-                    "LAPI denies /v1/decisions to the machine token — using "
-                    "the bouncer key instead"
-                )
-                return await self._async_bouncer_decisions(params)
-            # A valid token that is refused on this one route says something
-            # about the CrowdSec version, not about the credentials. Treating
-            # it as an outage would mark the whole instance unreachable over a
-            # feature the rest does not depend on.
-            _LOGGER.warning(
-                "LAPI denies /v1/decisions to the machine token (%s) — the ban "
-                "list stays empty. A bouncer API key would provide it",
-                err,
-            )
+        if self._bouncer_api_key is None:
             self.decisions_need_bouncer_key = True
             return None
-
-        if data is None:
-            # 404: some builds only serve the route to bouncers.
-            if self._bouncer_api_key is None:
-                self.decisions_need_bouncer_key = True
-                return None
-            return await self._async_bouncer_decisions(params)
-
         self.decisions_need_bouncer_key = False
-        if not isinstance(data, list):
-            raise CrowdSecConnectionError("LAPI /v1/decisions did not return an array")
-        return [item for item in data if isinstance(item, dict)]
+        return await self._async_bouncer_decisions(params)
 
     async def _async_bouncer_decisions(
         self, params: dict[str, str] | None = None
@@ -626,9 +588,9 @@ class CrowdSecClient:
         ``None`` if no bouncer key is configured or the endpoint has nothing to
         report — the ``cs_active_decisions`` metric then takes over.
 
-        Deliberately the bouncer path only: this is what the config flow uses
-        to check the key. Going through the machine token here would let a
-        wrong bouncer key pass validation unnoticed.
+        This is what the config flow uses to check the key. It leaves the
+        repair flag alone: validating a candidate key says nothing about the
+        key the running entry has.
         """
         decisions = await self._async_bouncer_decisions()
         return None if decisions is None else len(decisions)

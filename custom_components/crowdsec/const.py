@@ -138,9 +138,9 @@ WS_IP_BAN = f"{DOMAIN}/ip/ban"
 
 # --- Repair issues --------------------------------------------------------
 ISSUE_ALERTS_TRUNCATED = "alerts_truncated"
-# The LAPI will not hand the decision list to a machine token. A bouncer key
-# is the way out, and the repair flow asks for one instead of leaving the
-# reason buried in a log warning.
+# The LAPI hands the decision list to bouncers only. Without a bouncer key the
+# repair flow asks for one instead of leaving the ban table empty for no
+# visible reason.
 ISSUE_DECISIONS_UNAVAILABLE = "decisions_unavailable"
 
 # --- Metric names of the CrowdSec Prometheus endpoint ---------------------

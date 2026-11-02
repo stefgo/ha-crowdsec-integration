@@ -141,8 +141,8 @@ class FakeClient:
         self.metrics_error: Exception | None = None
         self.alerts_error: Exception | None = None
         self.decisions_error: Exception | None = None
-        # The real client sets this when a bouncer key would be the way
-        # out of an unreadable decision list.
+        # The real client sets this when the decision list was asked for
+        # without a bouncer key.
         self.decisions_need_bouncer_key = False
         # Own requests to the decision routes, as the real client counts them.
         self.decision_requests = 0

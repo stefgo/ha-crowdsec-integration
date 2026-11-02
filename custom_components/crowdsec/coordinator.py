@@ -738,9 +738,9 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
     def _report_missing_bouncer_key(self) -> None:
         """Offer a repair when the LAPI will not hand over the decision list.
 
-        Some CrowdSec versions only serve ``/v1/decisions`` to bouncers. The
-        user sees an empty ban table and, so far, nothing but a warning in the
-        log to explain it — with no hint that a bouncer key is all it takes.
+        CrowdSec serves ``GET /v1/decisions`` to bouncers only. Without a key
+        the user sees an empty ban table and nothing to explain it — with no
+        hint that a bouncer key is all it takes.
         """
         needed = getattr(self.client, "decisions_need_bouncer_key", False)
         if needed == self._bouncer_key_reported:

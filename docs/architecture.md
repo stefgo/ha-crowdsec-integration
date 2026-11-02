@@ -94,10 +94,16 @@ compares against to spot stale values.
 - **The delete guard asks the LAPI, not the table.** A purely central address is
   absent from the local-only table, so a table-based check would never fire
   while the lookup card happily offers the unban. The by-id path keeps a table
-  check as a safety net; the LAPI cannot look a decision up by id.
-- **`/v1/decisions` returning 404 is normal** on some versions. Fallback chain:
-  machine token → bouncer API key → the `cs_active_decisions` metric (count
-  only, empty table).
+  check as a safety net; the LAPI cannot look a decision up by id. Without a
+  bouncer key the lookup has nothing to show, and the guard refuses
+  (`decisions_unavailable`) rather than letting the delete through unchecked.
+- **The decision list is read with the bouncer key, never the machine token.**
+  CrowdSec routes `GET /v1/decisions` through its API-key middleware in every
+  version; machines may only delete there. Asking with the token earns a 403,
+  a needless re-login and an "API key not found" line in the CrowdSec log per
+  cycle (#33). Without a key nothing is sent: `decisions_need_bouncer_key`
+  raises the repair and the `cs_active_decisions` metric supplies the count.
+  A 404 with the key is normal on some versions and means the same.
 - **Bouncers are counted per bouncer, not via the route metric.**
   `cs_lapi_route_requests_total` counts the integration's own `/v1/decisions`
   query like a bouncer's, so the sum never fell to zero while Home Assistant
