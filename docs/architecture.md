@@ -121,7 +121,7 @@ compares against to spot stale values.
   a needless re-login and an "API key not found" line in the CrowdSec log per
   cycle (#33). Without a key nothing is sent: `decisions_need_bouncer_key`
   raises the repair and the `cs_active_decisions` metric supplies the count.
-  A 404 with the key is normal on some versions and means the same.
+  A 404 with the key is normal on some versions and means an empty list.
 - **Bouncers are counted per bouncer, not via the route metric.**
   `cs_lapi_route_requests_total` counts the integration's own `/v1/decisions`
   query like a bouncer's, so the sum never fell to zero while Home Assistant

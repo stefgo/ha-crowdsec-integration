@@ -123,14 +123,18 @@ def test_without_a_key_nothing_is_sent(query):
     assert client.decision_requests == 0
 
 
-def test_a_404_falls_back_to_the_metric():
-    """Not every CrowdSec version answers an empty list with an empty array."""
+def test_a_404_means_no_decisions():
+    """Not every CrowdSec version answers an empty list with an empty array.
+
+    It is an answer, not a failure: the table has to empty, not keep showing
+    the rows of the last cycle.
+    """
 
     async def scenario():
         client = build_client(bouncer_api_key="key", session=FakeSession(404))
         return await client.async_get_decisions()
 
-    assert run(scenario) is None
+    assert run(scenario) == []
 
 
 @pytest.mark.parametrize("status", [401, 403])

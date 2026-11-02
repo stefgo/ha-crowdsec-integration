@@ -34,6 +34,9 @@ Nothing inside an HTML comment is published.
   bouncer key or incomplete alert numbers stayed in Repairs after the key was
   added through *Reconfigure* or the limit was raised in the options, until
   Home Assistant restarted. Removing an instance now also removes its hints.
+- **An empty ban list is shown as empty.** Some CrowdSec versions answer "no
+  decisions" with *not found*. The card took that for an error, kept the last
+  table on screen and said the list was unavailable.
 
 ### Changed
 

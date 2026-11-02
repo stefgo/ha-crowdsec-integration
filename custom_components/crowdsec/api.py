@@ -575,11 +575,11 @@ class CrowdSecClient:
                     )
                 if response.status == 404:
                     # Not every CrowdSec version returns an empty array here —
-                    # a 404 means "nothing there", not "broken".
-                    _LOGGER.debug(
-                        "/v1/decisions answered with 404, falling back to the metric"
-                    )
-                    return None
+                    # a 404 means "nothing there", not "broken". Treating it as
+                    # a failure kept the last table on screen, rows of bans
+                    # that had since run out included.
+                    _LOGGER.debug("/v1/decisions answered with 404: no decisions")
+                    return []
                 if response.status != 200:
                     raise CrowdSecConnectionError(
                         f"LAPI /v1/decisions answered with HTTP {response.status}"
