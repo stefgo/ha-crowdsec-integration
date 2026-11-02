@@ -156,6 +156,9 @@ class FakeClient:
         self.lookup_alerts_error: Exception | None = None
         self.bans: list[tuple[str, str, str]] = []
         self.ban_error: Exception | None = None
+        # What the delete routes were asked to remove, in order.
+        self.deleted_ids: list[int] = []
+        self.unbanned: list[str] = []
         self._AlertResult = AlertResult
 
     async def async_get_metrics(self) -> MetricSet:
@@ -196,9 +199,11 @@ class FakeClient:
         return None
 
     async def async_unban_ip(self, ip):
+        self.unbanned.append(ip)
         return 1
 
     async def async_delete_decision(self, decision_id):
+        self.deleted_ids.append(decision_id)
         return 1
 
 

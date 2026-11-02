@@ -469,10 +469,16 @@ class CrowdSecClient:
         await self._async_lapi_request("POST", "/v1/alerts", payload=[alert])
 
     async def async_unban_ip(self, ip: str) -> int:
-        """Delete all decisions for an IP; returns their count."""
-        data = await self._async_lapi_request(
-            "DELETE", "/v1/decisions", {"scope": "Ip", "value": ip}
-        )
+        """Delete all decisions for an address or range; returns their count.
+
+        Filtered by ``value`` alone: the delete route knows ``scopes`` but not
+        ``scope``, and refuses an unknown parameter outright. Without a scope
+        the filter matches the decisions naming exactly this value, whether
+        they were stored as ``Ip`` or as ``Range``. A range merely *covering*
+        the address is left alone — that would need ``ip=``, which deletes far
+        more than "this address" asked for.
+        """
+        data = await self._async_lapi_request("DELETE", "/v1/decisions", {"value": ip})
         return _deleted_count(data)
 
     async def async_delete_decision(self, decision_id: int) -> int:

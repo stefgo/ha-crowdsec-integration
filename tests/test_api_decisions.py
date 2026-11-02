@@ -178,6 +178,28 @@ def test_delete_targets_a_single_decision():
     assert calls == [("DELETE", "/v1/decisions/42")]
 
 
+def test_delete_by_address_filters_by_value_only():
+    """The delete route knows ``scopes``, not ``scope``, and refuses the latter.
+
+    ``value`` alone matches the decisions naming exactly this address, stored
+    as ``Ip`` or ``Range`` alike — and nothing that merely covers it.
+    """
+    calls: list[tuple] = []
+
+    async def scenario():
+        client = build_client()
+
+        async def fake_request(method, path, params=None, *args, **kwargs):
+            calls.append((method, path, params))
+            return {"nbDeleted": "2"}
+
+        client._async_lapi_request = fake_request  # type: ignore[assignment]
+        return await client.async_unban_ip("192.0.2.1")
+
+    assert run(scenario) == 2
+    assert calls == [("DELETE", "/v1/decisions", {"value": "192.0.2.1"})]
+
+
 def test_deleted_count_reads_both_shapes():
     # CrowdSec sends the count as a string in some versions, as a number in
     # others — both mean the same thing.

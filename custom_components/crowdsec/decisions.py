@@ -17,6 +17,7 @@ active decisions and additionally contribute the expired ones.
 
 from __future__ import annotations
 
+import ipaddress
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -85,6 +86,21 @@ def parse_go_duration(raw: Any) -> float | None:
             return None
         total += float(amount) * factor
     return sign * total
+
+
+def _canonical_address(value: str) -> str:
+    """One spelling per address or range, so two notations compare equal.
+
+    IPv6 in particular has many ways to write the same address; a value that
+    is not an address at all is compared as it stands.
+    """
+    text = value.strip()
+    try:
+        if "/" in text:
+            return str(ipaddress.ip_network(text, strict=False))
+        return str(ipaddress.ip_address(text))
+    except ValueError:
+        return text
 
 
 def origin_kind(origin: str | None) -> str:
@@ -460,6 +476,25 @@ class IpReport:
     # The alert query is allowed to fail on its own — the decisions are the
     # answer, the history is the context.
     alerts_available: bool = True
+
+    def own_local_ids(self) -> list[int]:
+        """IDs of the local decisions that name the target itself.
+
+        This is what "remove all decisions for this address" may touch. A
+        decision from the CAPI or a blocklist for the same address would come
+        back with the next pull, and a range that merely covers the address is
+        a decision about the range — the lookup card offers that one as a row
+        of its own.
+        """
+        target = _canonical_address(self.target)
+        return [
+            record.decision_id
+            for record in self.decisions
+            if record.deletable
+            and record.decision_id is not None
+            and record.value is not None
+            and _canonical_address(record.value) == target
+        ]
 
     def as_dict(self) -> dict[str, Any]:
         """JSON-serialisable form for the WebSocket answer."""

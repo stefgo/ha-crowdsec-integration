@@ -97,6 +97,13 @@ compares against to spot stale values.
   check as a safety net; the LAPI cannot look a decision up by id. Without a
   bouncer key the lookup has nothing to show, and the guard refuses
   (`decisions_unavailable`) rather than letting the delete through unchecked.
+- **The cards unban an address by ID, the service by value.** The card's
+  "remove all decisions for this address" deletes the IDs from
+  `IpReport.own_local_ids()` one by one: local, active, naming the address
+  itself. Deleting by value would take a CAPI decision for the same address
+  with it, and a covering range is a row of its own. The `unban_ip` service
+  keeps its documented meaning and deletes by `value=` — the delete route
+  knows `scopes` but refuses `scope` outright.
 - **The decision list is read with the bouncer key, never the machine token.**
   CrowdSec routes `GET /v1/decisions` through its API-key middleware in every
   version; machines may only delete there. Asking with the token earns a 403,

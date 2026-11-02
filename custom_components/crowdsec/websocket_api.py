@@ -243,12 +243,13 @@ async def ws_decisions_delete(
             return
 
         report = build_ip_report(ip, existing, [])
-        if report.blocked and not report.deletable:
+        own_ids = report.own_local_ids()
+        if report.blocked and not own_ids:
             connection.send_error(
                 msg["id"],
                 "not_deletable",
-                f"All decisions for {ip} are managed centrally — they cannot "
-                "be removed locally.",
+                f"No local decision names {ip} itself — what blocks it is "
+                "managed centrally or covers it as a range.",
             )
             return
 
@@ -256,7 +257,12 @@ async def ws_decisions_delete(
         if decision_id is not None:
             deleted = await coordinator.client.async_delete_decision(decision_id)
         else:
-            deleted = await coordinator.client.async_unban_ip(str(ip))
+            # One by one, by the IDs the lookup just found. Deleting by value
+            # would take the CAPI and blocklist decisions for the same address
+            # with it, which the next pull only brings back.
+            deleted = 0
+            for own_id in own_ids:
+                deleted += await coordinator.client.async_delete_decision(own_id)
     except (CrowdSecAuthError, CrowdSecConnectionError) as err:
         connection.send_error(msg["id"], "request_failed", str(err))
         return
