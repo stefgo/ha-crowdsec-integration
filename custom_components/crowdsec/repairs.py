@@ -56,7 +56,7 @@ class BouncerKeyRepairFlow(RepairsFlow):
             }
             client = build_client(self.hass, data, entry.data.get("verify_ssl", True))
             try:
-                await client.async_get_active_decision_count()
+                await client.async_check_bouncer_key()
             except CrowdSecAuthError as err:
                 errors["base"] = "invalid_auth_bouncer"
                 detail = str(err)

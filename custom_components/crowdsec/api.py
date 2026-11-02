@@ -44,6 +44,10 @@ ENDPOINT_BOUNCER = "bouncer"
 ENDPOINT_DECISIONS = "decisions"
 
 
+# What the bouncer key is checked with: an address from TEST-NET-1 (RFC 5737)
+# that nobody bans, so the answer stays empty however long the list is.
+BOUNCER_KEY_PROBE_ADDRESS = "192.0.2.1"
+
 # The scopes CrowdSec gives an address and a CIDR range.
 SCOPE_IP = "Ip"
 SCOPE_RANGE = "Range"
@@ -596,18 +600,21 @@ class CrowdSecClient:
             raise CrowdSecConnectionError("LAPI /v1/decisions did not return an array")
         return [item for item in data if isinstance(item, dict)]
 
-    async def async_get_active_decision_count(self) -> int | None:
-        """Number of active decisions via the bouncer API.
+    async def async_check_bouncer_key(self) -> None:
+        """Check that the bouncer key opens the decision route.
 
-        ``None`` if no bouncer key is configured or the endpoint has nothing to
-        report — the ``cs_active_decisions`` metric then takes over.
+        Asks for a single documentation address (TEST-NET-1) rather than for
+        the list: on an instance subscribed to a blocklist the whole list is
+        hundreds of thousands of entries, and the config flow and the repair
+        would wait for all of them only to see whether the key works. ``ip=``
+        is a filter every CrowdSec version knows.
 
-        This is what the config flow uses to check the key. It leaves the
+        Raises like any decision query; a rejected key is a
+        :class:`CrowdSecAuthError` for the bouncer endpoint. It leaves the
         repair flag alone: validating a candidate key says nothing about the
         key the running entry has.
         """
-        decisions = await self._async_bouncer_decisions()
-        return None if decisions is None else len(decisions)
+        await self._async_bouncer_decisions({"ip": BOUNCER_KEY_PROBE_ADDRESS})
 
     async def async_validate(self) -> None:
         """Check every access path the coordinator will need later.
@@ -623,4 +630,4 @@ class CrowdSecClient:
         # alerts.
         await self._async_alerts_window(Window(60, 0), 1)
         if self._bouncer_api_key is not None:
-            await self.async_get_active_decision_count()
+            await self.async_check_bouncer_key()

@@ -41,6 +41,10 @@ Nothing inside an HTML comment is published.
   When more alerts arrive than one query returns, the window is fetched in
   parts; alerts that started between two of those parts were missing from the
   counts.
+- **Checking a bouncer key no longer downloads every decision.** Setting up an
+  instance or adding a key through the repair fetched the whole decision list
+  just to see whether the key works — hundreds of thousands of entries with a
+  blocklist subscribed. It now asks about a single address.
 
 ### Changed
 

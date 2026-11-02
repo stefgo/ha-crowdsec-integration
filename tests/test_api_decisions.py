@@ -252,6 +252,38 @@ def test_deleted_count_reads_both_shapes():
     assert _deleted_count(None) == 0
 
 
+# -- Checking the key -------------------------------------------------------
+
+
+def test_the_key_is_checked_without_fetching_the_list():
+    """With a blocklist the list is huge; one address answers the question."""
+    session = FakeSession(body=None)
+
+    async def scenario():
+        client = build_client(bouncer_api_key="key", session=session)
+        forbid_machine_token(client)
+        await client.async_check_bouncer_key()
+        return client
+
+    client = run(scenario)
+    (request,) = session.requests
+    assert request["params"] == {"ip": "192.0.2.1"}
+    assert request["headers"]["X-Api-Key"] == "key"
+    # A candidate key says nothing about the running entry's key.
+    assert client.decisions_need_bouncer_key is False
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_a_rejected_key_fails_the_check(status):
+    async def scenario():
+        client = build_client(bouncer_api_key="wrong", session=FakeSession(status))
+        await client.async_check_bouncer_key()
+
+    with pytest.raises(CrowdSecAuthError) as err:
+        run(scenario)
+    assert err.value.endpoint == ENDPOINT_BOUNCER
+
+
 # -- Restricting to origins -------------------------------------------------
 
 

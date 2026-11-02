@@ -114,7 +114,7 @@ async def test_the_flow_stores_a_working_key(hass, loaded_entry):
         patch(
             "custom_components.crowdsec.build_client",
             return_value=AsyncMock(
-                async_get_active_decision_count=AsyncMock(return_value=3)
+                async_check_bouncer_key=AsyncMock(return_value=None)
             ),
         ),
         patch(
@@ -148,9 +148,7 @@ async def test_a_bad_key_is_not_stored(hass, loaded_entry, error, expected):
 
     with patch(
         "custom_components.crowdsec.build_client",
-        return_value=AsyncMock(
-            async_get_active_decision_count=AsyncMock(side_effect=error)
-        ),
+        return_value=AsyncMock(async_check_bouncer_key=AsyncMock(side_effect=error)),
     ):
         result = await flow.async_step_confirm({"bouncer_api_key": "wrong"})
 
