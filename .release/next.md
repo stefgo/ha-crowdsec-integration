@@ -28,6 +28,13 @@ Nothing inside an HTML comment is published.
   appear to have ended before it even started, and the expired rows were
   sorted accordingly.
 
+### Changed
+
+- **A banned range is stored as a range.** Banning a CIDR range such as
+  `192.0.2.0/24` from Home Assistant now gives the decision the scope `Range`,
+  the way `cscli decisions add --range` does, instead of `Ip`. Bans set before
+  the update keep their old scope until they expire.
+
 ### Upgrade notes
 
 - **The ban table and the IP lookup need a bouncer API key.** CrowdSec hands

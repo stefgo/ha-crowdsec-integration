@@ -44,6 +44,11 @@ ENDPOINT_BOUNCER = "bouncer"
 ENDPOINT_DECISIONS = "decisions"
 
 
+# The scopes CrowdSec gives an address and a CIDR range.
+SCOPE_IP = "Ip"
+SCOPE_RANGE = "Range"
+
+
 class CrowdSecError(Exception):
     """Base error of the integration."""
 
@@ -436,8 +441,11 @@ class CrowdSecClient:
         """Create a ban decision via a self-generated alert.
 
         The LAPI offers no way to create a decision on its own — it always
-        hangs off an alert. That is exactly what ``cscli decisions add`` does.
+        hangs off an alert. That is exactly what ``cscli decisions add`` does,
+        including the scope: ``Ip`` for an address, ``Range`` for a CIDR
+        range, as ``--ip`` and ``--range`` set it.
         """
+        scope = SCOPE_RANGE if "/" in ip else SCOPE_IP
         now = datetime.now(UTC).isoformat()
         scenario = f"manual '{reason}' from 'hass'"
         alert = {
@@ -454,13 +462,13 @@ class CrowdSecClient:
             "events": [],
             "remediation": True,
             "labels": None,
-            "source": {"scope": "Ip", "value": ip, "ip": ip},
+            "source": {"scope": scope, "value": ip, "ip": ip},
             "decisions": [
                 {
                     "duration": duration,
                     "origin": DECISION_ORIGIN,
                     "scenario": scenario,
-                    "scope": "Ip",
+                    "scope": scope,
                     "type": "ban",
                     "value": ip,
                 }

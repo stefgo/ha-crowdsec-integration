@@ -200,6 +200,44 @@ def test_delete_by_address_filters_by_value_only():
     assert calls == [("DELETE", "/v1/decisions", {"value": "192.0.2.1"})]
 
 
+def ban_payload(target: str) -> dict:
+    calls: list[tuple] = []
+
+    async def scenario():
+        client = build_client()
+
+        async def fake_request(method, path, params=None, payload=None, **kwargs):
+            calls.append((method, path, payload))
+            return None
+
+        client._async_lapi_request = fake_request  # type: ignore[assignment]
+        await client.async_ban_ip(target, "4h", "test")
+
+    run(scenario)
+    ((method, path, payload),) = calls
+    assert (method, path) == ("POST", "/v1/alerts")
+    (alert,) = payload
+    return alert
+
+
+def test_an_address_is_banned_with_the_ip_scope():
+    alert = ban_payload("192.0.2.1")
+    assert alert["source"]["scope"] == "Ip"
+    assert alert["decisions"][0]["scope"] == "Ip"
+
+
+def test_a_range_is_banned_with_the_range_scope():
+    """The scope ``cscli decisions add --range`` gives it, not ``Ip``."""
+    alert = ban_payload("10.0.0.0/24")
+    assert alert["source"]["scope"] == "Range"
+    assert alert["decisions"][0] == {
+        **alert["decisions"][0],
+        "scope": "Range",
+        "value": "10.0.0.0/24",
+        "duration": "4h",
+    }
+
+
 def test_deleted_count_reads_both_shapes():
     # CrowdSec sends the count as a string in some versions, as a number in
     # others — both mean the same thing.

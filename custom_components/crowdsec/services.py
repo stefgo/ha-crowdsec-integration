@@ -76,8 +76,8 @@ def _coordinator(hass: HomeAssistant, call: ServiceCall):
 def _validated_ip(call: ServiceCall) -> str:
     """Validate the target address before it goes to the LAPI.
 
-    Single addresses and CIDR ranges are both allowed — CrowdSec uses the
-    scope "Ip" for both.
+    Single addresses and CIDR ranges are both allowed; a range is banned with
+    the scope "Range", as ``cscli decisions add --range`` does.
     """
     raw = str(call.data[ATTR_IP])
     try:
