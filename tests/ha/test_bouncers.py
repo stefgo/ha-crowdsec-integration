@@ -468,7 +468,9 @@ def bouncer_device(hass, entity_id):
 
 
 def instance_device(hass, config_entry):
-    return dr.async_get(hass).async_get_device({(DOMAIN, config_entry.entry_id)})
+    return dr.async_get(hass).async_get_device_by_identifier(
+        (DOMAIN, config_entry.entry_id), config_entry.entry_id
+    )
 
 
 async def remove_device(hass, hass_ws_client, config_entry, device_id) -> bool:

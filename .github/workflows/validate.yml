@@ -36,7 +36,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: "3.14"
       - run: pip install -r requirements_test.txt
       - run: ruff check .
       - run: ruff format --check .
@@ -50,7 +50,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: "3.14"
       - run: pip install -r requirements_test.txt
       - run: pytest -q
 
@@ -61,7 +61,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: "3.14"
       - run: pip install -r requirements_test_ha.txt
       # Its own invocation: these tests need the real Home Assistant fixtures,
       # whereas pytest.ini is set up for the framework-free suite.
