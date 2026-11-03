@@ -442,6 +442,27 @@ class CrowdSecCoordinator(DataUpdateCoordinator[CrowdSecData]):
         """A bouncer's entity was added — it is in the registry from now on."""
         self._bouncers.mark_registered(name)
 
+    def forget_bouncer(self, name: str) -> bool:
+        """Forget a bouncer whose device the user deletes.
+
+        Refused while the bouncer still queries: it would be back on the next
+        cycle. The entity goes first, so that no cycle in between reads it
+        off the registry and brings the bouncer straight back.
+        """
+        if not self._bouncers.forget(name):
+            return False
+        entry = self.config_entry
+        if entry is not None:
+            registry = er.async_get(self.hass)
+            unique_id = f"{entry.entry_id}{BOUNCER_UNIQUE_ID_INFIX}{name}"
+            entity_id = registry.async_get_entity_id("binary_sensor", DOMAIN, unique_id)
+            if entity_id is not None:
+                registry.async_remove(entity_id)
+        self._ignored_bouncers.discard(name)
+        # Status and Active bouncers should not wait a whole interval.
+        self.hass.async_create_task(self.async_request_refresh())
+        return True
+
     def _unwrap(self, data: CrowdSecData, result: Any, expected: type) -> Any | None:
         """Evaluate one result from ``asyncio.gather``.
 

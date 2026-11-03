@@ -12,12 +12,14 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntityDescription,
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .bouncers import BouncerStatus
 from .const import BOUNCER_UNIQUE_ID_INFIX
 from .coordinator import CrowdSecConfigEntry, CrowdSecCoordinator, CrowdSecData
-from .entity import CrowdSecEntity
+from .entity import CrowdSecEntity, bouncer_device_info
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -60,6 +62,7 @@ async def async_setup_entry(
     decisions, so their entities are added as the coordinator finds them.
     """
     coordinator = entry.runtime_data
+    _attach_bouncers_to_their_devices(hass, entry)
     async_add_entities(
         CrowdSecBinarySensor(coordinator, entry, description)
         for description in BINARY_SENSORS
@@ -82,6 +85,30 @@ async def async_setup_entry(
 
     _add_new_bouncers()
     entry.async_on_unload(coordinator.async_add_listener(_add_new_bouncers))
+
+
+def _attach_bouncers_to_their_devices(
+    hass: HomeAssistant, entry: CrowdSecConfigEntry
+) -> None:
+    """Move every known bouncer's entity onto the bouncer's own device.
+
+    Up to 1.4.0 the bouncers hung off the instance's device. Home Assistant
+    moves an entity to its new device when the entity is added — but a
+    disabled bouncer never is, so it would stay behind with no device of its
+    own to delete. Doing it here covers both; it changes nothing once done.
+    """
+    devices = dr.async_get(hass)
+    entities = er.async_get(hass)
+    prefix = f"{entry.entry_id}{BOUNCER_UNIQUE_ID_INFIX}"
+    for item in er.async_entries_for_config_entry(entities, entry.entry_id):
+        if item.domain != "binary_sensor" or not item.unique_id.startswith(prefix):
+            continue
+        device = devices.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            **bouncer_device_info(entry, item.unique_id[len(prefix) :]),
+        )
+        if item.device_id != device.id:
+            entities.async_update_entity(item.entity_id, device_id=device.id)
 
 
 class CrowdSecBinarySensor(CrowdSecEntity, BinarySensorEntity):
@@ -113,11 +140,14 @@ class CrowdSecBouncerSensor(CrowdSecEntity, BinarySensorEntity):
     """Whether one bouncer still fetches decisions.
 
     On while it does, off once it has not asked for N intervals in a row,
-    unknown until either is clear. Disabling the entity is how a bouncer is
-    ignored: the coordinator then leaves it out of the status and the counts.
+    unknown until either is clear. Disabling the entity (or its device) is how
+    a bouncer is ignored: the coordinator then leaves it out of the status and
+    the counts. Deleting its device is how a removed bouncer is forgotten.
     """
 
     _attr_device_class = BinarySensorDeviceClass.RUNNING
+    # The entity is the device's only one and goes by the device's name.
+    _attr_name = None
 
     def __init__(
         self,
@@ -129,14 +159,12 @@ class CrowdSecBouncerSensor(CrowdSecEntity, BinarySensorEntity):
         super().__init__(
             coordinator,
             entry,
-            BinarySensorEntityDescription(
-                key=f"bouncer_{name}", translation_key="bouncer"
-            ),
+            BinarySensorEntityDescription(key=f"bouncer_{name}"),
+            bouncer_device_info(entry, name),
         )
         # The coordinator reads the bouncer's name back from this ID in the
         # entity registry.
         self._attr_unique_id = f"{entry.entry_id}{BOUNCER_UNIQUE_ID_INFIX}{name}"
-        self._attr_translation_placeholders = {"name": name}
         self._bouncer = name
         self._added = added
 

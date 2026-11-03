@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.setup import async_setup_component
 
 from custom_components.crowdsec.api import CrowdSecConnectionError
 from custom_components.crowdsec.const import (
@@ -454,3 +456,157 @@ async def test_no_lines_from_the_start_is_not_a_problem(
 
     for _ in range(5):
         assert _no_lines_problem(coordinator, 0.0) is None
+
+
+# -- A device per bouncer ----------------------------------------------------
+
+
+def bouncer_device(hass, entity_id):
+    entity = er.async_get(hass).async_get(entity_id)
+    assert entity is not None and entity.device_id is not None
+    return dr.async_get(hass).async_get(entity.device_id)
+
+
+def instance_device(hass, config_entry):
+    return dr.async_get(hass).async_get_device({(DOMAIN, config_entry.entry_id)})
+
+
+async def remove_device(hass, hass_ws_client, config_entry, device_id) -> bool:
+    assert await async_setup_component(hass, "config", {})
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {
+            "type": "config/device_registry/remove_config_entry",
+            "config_entry_id": config_entry.entry_id,
+            "device_id": device_id,
+        }
+    )
+    response = await client.receive_json()
+    await hass.async_block_till_done()
+    return response["success"]
+
+
+async def test_every_bouncer_is_a_device_of_its_own(hass, config_entry, fake_client):
+    """Connected via the instance, and named as the entity was before."""
+    counts = {"traefik": 1.0}
+    fake_client.metrics_fn = lambda: per_bouncer_metrics(counts)
+    coordinator = await setup(hass, config_entry, fake_client)
+    counts["traefik"] += 1
+    await refresh(hass, coordinator)
+
+    device = bouncer_device(hass, TRAEFIK)
+    assert device.via_device_id == instance_device(hass, config_entry).id
+    assert device.name == "CrowdSec Bouncer traefik"
+    assert device.model == "Bouncer"
+    assert hass.states.get(TRAEFIK).name == "CrowdSec Bouncer traefik"
+    # The instance's own entities stay on the instance's device.
+    assert bouncer_device(hass, STATUS) == instance_device(hass, config_entry)
+
+
+async def test_bouncers_of_an_older_version_move_to_their_device(
+    hass, config_entry, fake_client
+):
+    """Up to 1.4.0 they hung off the instance — the disabled ones too."""
+    config_entry.add_to_hass(hass)
+    instance = dr.async_get(hass).async_get_or_create(
+        config_entry_id=config_entry.entry_id,
+        identifiers={(DOMAIN, config_entry.entry_id)},
+    )
+    registry = er.async_get(hass)
+    for name, disabled_by in (
+        ("traefik", None),
+        ("fw", er.RegistryEntryDisabler.USER),
+    ):
+        registry.async_get_or_create(
+            "binary_sensor",
+            DOMAIN,
+            f"{config_entry.entry_id}_bouncer_{name}",
+            config_entry=config_entry,
+            device_id=instance.id,
+            disabled_by=disabled_by,
+            suggested_object_id=f"crowdsec_bouncer_{name}",
+        )
+    fake_client.metrics_fn = lambda: per_bouncer_metrics({})
+
+    await setup(hass, config_entry, fake_client)
+
+    for entity_id in (TRAEFIK, FIREWALL):
+        device = bouncer_device(hass, entity_id)
+        assert device.id != instance.id
+        assert device.via_device_id == instance.id
+    assert registry.async_get(FIREWALL).disabled_by is er.RegistryEntryDisabler.USER
+
+
+async def test_deleting_a_stopped_bouncers_device_forgets_it(
+    hass, hass_ws_client, config_entry, fake_client
+):
+    counts = {"traefik": 10.0, "fw": 100.0}
+
+    def metrics():
+        counts["traefik"] += 1
+        return per_bouncer_metrics(counts)
+
+    fake_client.metrics_fn = metrics
+    coordinator = await setup(
+        hass, config_entry, fake_client, **{CONF_BOUNCER_IDLE_INTERVALS: 1}
+    )
+    counts["fw"] += 1
+    await refresh(hass, coordinator)
+    await refresh(hass, coordinator, times=2)
+    assert hass.states.get(FIREWALL).state == "off"
+    assert hass.states.get(STATUS).state == "on"
+
+    # The instance stays, and so does a bouncer that still queries.
+    instance = instance_device(hass, config_entry)
+    assert not await remove_device(hass, hass_ws_client, config_entry, instance.id)
+    traefik = bouncer_device(hass, TRAEFIK)
+    assert not await remove_device(hass, hass_ws_client, config_entry, traefik.id)
+    assert hass.states.get(TRAEFIK) is not None
+
+    fw = bouncer_device(hass, FIREWALL)
+    assert await remove_device(hass, hass_ws_client, config_entry, fw.id)
+
+    assert dr.async_get(hass).async_get(fw.id) is None
+    assert er.async_get(hass).async_get(FIREWALL) is None
+    assert hass.states.get(STATUS).state == "off"
+    assert hass.states.get(ACTIVE_BOUNCERS).attributes["total"] == 1
+
+    # Its counter lingers until CrowdSec restarts — that brings nothing back.
+    data = await refresh(hass, coordinator, times=2)
+    assert [status.name for status in data.bouncers] == ["traefik"]
+    assert er.async_get(hass).async_get(FIREWALL) is None
+
+    # Once it queries again it is back, enabled.
+    counts["fw"] += 1
+    await refresh(hass, coordinator)
+    entry = er.async_get(hass).async_get(FIREWALL)
+    assert entry is not None
+    assert entry.disabled_by is None
+    assert hass.states.get(FIREWALL).state == "on"
+
+
+async def test_a_disabled_device_ignores_its_bouncer(hass, config_entry, fake_client):
+    counts = {"traefik": 10.0, "fw": 100.0}
+
+    def metrics():
+        counts["traefik"] += 1
+        return per_bouncer_metrics(counts)
+
+    fake_client.metrics_fn = metrics
+    coordinator = await setup(
+        hass, config_entry, fake_client, **{CONF_BOUNCER_IDLE_INTERVALS: 1}
+    )
+    counts["fw"] += 1
+    await refresh(hass, coordinator)
+    await refresh(hass, coordinator, times=2)
+    assert hass.states.get(STATUS).state == "on"
+
+    dr.async_get(hass).async_update_device(
+        bouncer_device(hass, FIREWALL).id,
+        disabled_by=dr.DeviceEntryDisabler.USER,
+    )
+    await hass.async_block_till_done()
+    data = await refresh(hass, coordinator)
+
+    assert [status.name for status in data.bouncers] == ["traefik"]
+    assert data.problem is False

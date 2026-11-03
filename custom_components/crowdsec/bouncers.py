@@ -142,6 +142,21 @@ class BouncerTracker:
         if entry is not None:
             entry.registered = True
 
+    def forget(self, name: str) -> bool:
+        """Drop a bouncer the user removed; refused while it still queries.
+
+        One that queries would be back on the very next cycle, so removing it
+        would achieve nothing. A forgotten bouncer stays away while its counter
+        stands still and returns as soon as it queries again.
+        """
+        entry = self._entries.get(name)
+        if entry is None:
+            return True
+        if entry.active is True:
+            return False
+        del self._entries[name]
+        return True
+
     def reset(self) -> None:
         """Discard the last measurement, e.g. after a failed scrape."""
         self._counters = None
