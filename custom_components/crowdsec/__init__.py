@@ -11,6 +11,7 @@ from homeassistant.const import CONF_TIMEOUT, CONF_VERIFY_SSL, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.device_registry import DeviceEntry
 
 from .api import CrowdSecClient
 from .const import (
@@ -28,6 +29,7 @@ from .const import (
     ISSUE_DECISIONS_UNAVAILABLE,
 )
 from .coordinator import CrowdSecConfigEntry, CrowdSecCoordinator
+from .entity import bouncer_of_device
 from .services import async_setup_services, async_unload_services
 from .websocket_api import async_register_websocket_api
 
@@ -127,6 +129,25 @@ async def _async_register_card(hass: HomeAssistant) -> None:
     # Version in the query string: otherwise the browser keeps holding on to
     # the old card after an update.
     add_extra_js_url(hass, f"{CARD_URL_PATH}/{CARD_FILENAME}?v={INTEGRATION_VERSION}")
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: CrowdSecConfigEntry, device: DeviceEntry
+) -> bool:
+    """Allow deleting a bouncer's device, which forgets the bouncer.
+
+    That is the way to get rid of a bouncer removed from CrowdSec, e.g. with
+    ``cscli bouncers prune``. The instance's own device stays, and so does a
+    bouncer that still queries — it would be back on the next cycle.
+    """
+    name = bouncer_of_device(entry, device)
+    if name is None:
+        return False
+    coordinator = getattr(entry, "runtime_data", None)
+    if coordinator is None:
+        # Not loaded: nothing is tracking the bouncer that could bring it back.
+        return True
+    return coordinator.forget_bouncer(name)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: CrowdSecConfigEntry) -> bool:

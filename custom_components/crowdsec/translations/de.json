@@ -177,11 +177,13 @@
       }
     }
   },
+  "device": {
+    "bouncer": { "name": "{instance} Bouncer {name}" }
+  },
   "entity": {
     "binary_sensor": {
       "reachable": { "name": "Erreichbar" },
-      "problem": { "name": "Status" },
-      "bouncer": { "name": "Bouncer {name}" }
+      "problem": { "name": "Status" }
     },
     "sensor": {
       "scrape_duration": { "name": "Scrape-Dauer" },

@@ -250,6 +250,44 @@ def test_a_deleted_bouncer_stays_away_while_its_counter_stands_still():
     assert tracker.names == {"old"}
 
 
+def test_a_stopped_or_unknown_bouncer_can_be_forgotten():
+    tracker = BouncerTracker(idle_limit=1)
+    tracker.sync_registry({"old", "fresh"})
+    feed(tracker, {"old": 5.0}, 0.0)
+    feed(tracker, {"old": 5.0}, 60.0)
+    assert by_name(tracker)["old"].active is False
+
+    assert tracker.forget("old") is True
+    assert tracker.forget("fresh") is True
+    assert tracker.names == set()
+    # Forgetting what is not known is not an error.
+    assert tracker.forget("never-seen") is True
+
+
+def test_a_querying_bouncer_cannot_be_forgotten():
+    """It would be back on the next cycle anyway."""
+    tracker = BouncerTracker(idle_limit=1)
+    feed(tracker, {}, 0.0)
+    feed(tracker, {"traefik": 1.0}, 60.0)
+
+    assert tracker.forget("traefik") is False
+    assert tracker.names == {"traefik"}
+
+
+def test_a_forgotten_bouncer_returns_when_it_queries_again():
+    tracker = BouncerTracker(idle_limit=1)
+    tracker.sync_registry({"old"})
+    feed(tracker, {"old": 5.0}, 0.0)
+    feed(tracker, {"old": 5.0}, 60.0)
+    tracker.forget("old")
+
+    feed(tracker, {"old": 5.0}, 120.0)
+    assert tracker.names == set()
+
+    feed(tracker, {"old": 6.0}, 180.0)
+    assert by_name(tracker)["old"].active is True
+
+
 def test_ignored_bouncers_are_left_out():
     tracker = BouncerTracker(idle_limit=1)
     tracker.sync_registry({"traefik", "homeassistant"})

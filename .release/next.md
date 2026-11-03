@@ -57,6 +57,14 @@ Nothing inside an HTML comment is published.
 
 ### Changed
 
+- **Every bouncer is a device of its own, and a removed bouncer can be
+  deleted.** A bouncer taken out of CrowdSec (`cscli bouncers delete` or
+  `prune`) used to keep its entity, which could only be removed after
+  disabling it first, and was reported as stopped again after a few
+  intervals. Each bouncer now shows up as
+  a device connected via its CrowdSec instance; *Delete* on that device page
+  forgets it. A bouncer that still queries cannot be deleted — disable it to
+  ignore it instead.
 - **A banned range is stored as a range.** Banning a CIDR range such as
   `192.0.2.0/24` from Home Assistant now gives the decision the scope `Range`,
   the way `cscli decisions add --range` does, instead of `Ip`. Bans set before
@@ -73,3 +81,9 @@ Nothing inside an HTML comment is published.
   is asked any more and Home Assistant offers a repair to add one
   (`cscli bouncers add homeassistant`). The `Active decisions` sensor works
   without a key as before.
+- **Bouncers moved to devices of their own.** Their entity IDs, names, history
+  and settings stay as they are. Anything that refers to the CrowdSec
+  *device* — device triggers and conditions, actions aimed at the device, an
+  area assigned through the device — no longer includes the bouncers; give the
+  bouncer devices an area of their own if needed. Going back to an older
+  version leaves the bouncer devices behind empty; they do no harm.

@@ -36,7 +36,7 @@ the coordinator or above.
 | `decisions.py` | Merges `/v1/decisions` with `/v1/alerts` into flat `DecisionRecord`s and parses Go durations. HA-free. |
 | `timewindow.py` | Window splitting arithmetic for the truncation fallback. HA-free. |
 | `validation.py` | Input checking (addresses, ban durations) shared by `services.py` and `websocket_api.py`. HA-free. |
-| `entity.py` | `CrowdSecEntity` — binds every entity to the config entry's device. |
+| `entity.py` | `CrowdSecEntity` — binds every entity to the config entry's device, a bouncer's to its own device (`bouncer_device_info`). |
 | `sensor.py`, `binary_sensor.py` | Description-driven platforms over `CrowdSecData`. The bouncer entities are added by a coordinator listener as bouncers turn up. |
 | `websocket_api.py` | `crowdsec/decisions/list\|delete`, `crowdsec/instances`, `crowdsec/ip/lookup\|ban`. The cards read from here rather than from entity attributes — a ban table would blow past attribute size limits and land in the recorder. Admin-only; deletes are restricted to local-origin decisions. |
 | `services.py`, `services.yaml` | `ban_ip`, `unban_ip`, `refresh`, all targeting a `config_entry_id`. |
@@ -135,6 +135,18 @@ compares against to spot stale values.
   broken bouncer is exactly the one without a counter. The entity registry is
   the memory across restarts of Home Assistant; disabling an entity is the
   way to ignore a bouncer, and a deleted entity forgets it.
+- **A bouncer is a device of its own**, connected via the instance's device.
+  A pruned bouncer cannot be told from a stopped one — the LAPI has no bouncer
+  list for a machine — so forgetting it is the user's call, and a device's
+  *Delete* is where Home Assistant offers that. `async_remove_config_entry_device`
+  refuses the instance's device and a bouncer that still queries (it would be
+  back on the next cycle); otherwise `forget_bouncer` drops it from the tracker
+  and removes its entity before any cycle can read it back off the registry.
+  The device is named `<instance> Bouncer <name>` and the entity takes that
+  name, so entity IDs and names are those the entities had on the instance's
+  device. The binary sensor platform moves existing registry entries onto their
+  device at setup, because a disabled bouncer is never added and Home Assistant
+  would not move it otherwise.
 - **The summed fallback orders its queries.** At `prometheus.level:
   aggregated` only the route sum exists, and the client counts its own decision
   requests (`decision_requests`) to subtract them. That only works if each own

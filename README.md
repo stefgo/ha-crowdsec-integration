@@ -77,7 +77,7 @@ On the CrowdSec side, three things:
    the lookup stay empty and Home Assistant offers a repair to add one. The
    `Active decisions` sensor is not affected either way — it always reads the
    `cs_active_decisions` metric. With the key, `homeassistant` shows up as a
-   bouncer of its own; disable its entity (see [Bouncers](#bouncers)).
+   bouncer of its own; disable it (see [Bouncers](#bouncers)).
 
 ## Installation
 
@@ -469,7 +469,8 @@ automation:
 CrowdSec decides what to block; a bouncer — a firewall, a reverse proxy plugin
 — fetches those decisions and enforces them. If a bouncer stops, detection
 carries on and nothing is blocked any more, which is invisible from the
-outside. Each bouncer therefore gets an entity of its own, `Bouncer <name>`:
+outside. Each bouncer therefore gets a device of its own, *connected via* the
+instance's device, with one entity `<instance> Bouncer <name>`:
 
 * **on** while it fetches decisions, **off** once it has not done so for N
   intervals in a row (the option above), **unknown** until either is clear —
@@ -479,11 +480,15 @@ outside. Each bouncer therefore gets an entity of its own, `Bouncer <name>`:
   known after that, also across restarts: after a restart of CrowdSec a
   bouncer that does not query any more is missing from the metrics altogether,
   and it must go off rather than vanish.
-* **To ignore a bouncer, disable its entity.** It then counts neither for
-  `Status` nor for `Active bouncers`. That is the way for a bouncer that is
-  gone for good, or for the integration's own key. A disabled entity can be
-  deleted; Home Assistant remembers it, so if the bouncer queries again its
-  entity comes back disabled.
+* **To remove a bouncer that is gone from CrowdSec** (`cscli bouncers delete`
+  or `prune`), open its device and choose *Delete*. That works as long as it
+  does not query any more — one that does would be back on the next interval,
+  so Home Assistant refuses with "rejected by integration". Should a deleted
+  bouncer query again later, it comes back by itself.
+* **To ignore a bouncer that is still around, disable its entity or its
+  device.** It then counts neither for `Status` nor for `Active bouncers`.
+  That is the way for one that only queries now and then, or for the
+  integration's own key.
 
 The source is `cs_lapi_bouncer_requests_total`, which only counts requests made
 with a bouncer key. Only the decision routes count (`/v1/decisions` and
@@ -491,7 +496,7 @@ with a bouncer key. Only the decision routes count (`/v1/decisions` and
 
 A bouncer in *live* mode asks for every incoming request and nothing when
 nobody visits — at night it may go off without being broken. Use *stream* mode
-where the bouncer offers it, or disable the entity.
+where the bouncer offers it, or disable it.
 
 With `prometheus.level: aggregated` CrowdSec only counts the requests of all
 clients together. Then there are no entities per bouncer, `Active bouncers` is
