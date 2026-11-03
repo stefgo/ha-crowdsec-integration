@@ -1,6 +1,7 @@
 {
   "domain": "crowdsec",
   "name": "CrowdSec",
+  "categories": ["security_safety", "computers_network.monitoring"],
   "codeowners": ["@stefgo"],
   "config_flow": true,
   "dependencies": ["http", "frontend", "websocket_api"],
