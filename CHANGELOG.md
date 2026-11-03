@@ -8,6 +8,110 @@ An entry is put together by the release workflow: the text written by hand in
 are added to the release page and do not belong in an entry. The entries up to
 1.3.5 were written by hand as a whole.
 
+## [1.5.0](https://github.com/stefgo/ha-crowdsec-integration/compare/v1.4.0...v1.5.0) (2026-11-03)
+
+### Fixed
+
+- **No more "API key not found" errors in the CrowdSec log.** The integration
+  asked for the decision list with its machine credentials first, which
+  CrowdSec always refuses, and logged in again on every poll before falling
+  back to the bouncer key. It now asks with the bouncer key straight away; the
+  log stays clean and the needless login is gone.
+- **Removing all decisions for an address works.** CrowdSec refused the
+  request behind the `crowdsec.unban_ip` service and behind *Remove all
+  decisions for …* in both cards, so nothing was removed. The service now
+  removes every decision for the address, as documented. The cards remove only
+  the address's own local decisions, so a decision from the CAPI or a blocklist
+  for the same address, or a range covering it, stays in place. The lookup card
+  offers the button only when a local decision names the address itself; a
+  local range covering it is removed through its own row.
+- **Expired bans in the ban table show when they really ran out.** The
+  expiry was off by the age of the alert, so a ban from the morning could
+  appear to have ended before it even started, and the expired rows were
+  sorted accordingly.
+- **The ban table shows the effect of every ban and unban at once.** A second
+  click within a few seconds of the first used to come back with the row it
+  had just removed.
+- **Repair hints go away once their cause is fixed.** A hint about a missing
+  bouncer key or incomplete alert numbers stayed in Repairs after the key was
+  added through *Reconfigure* or the limit was raised in the options, until
+  Home Assistant restarted. Removing an instance now also removes its hints.
+- **An empty ban list is shown as empty.** Some CrowdSec versions answer "no
+  decisions" with *not found*. The card took that for an error, kept the last
+  table on screen and said the list was unavailable.
+- **Busy instances no longer lose alerts at the seams of the 24-hour window.**
+  When more alerts arrive than one query returns, the window is fetched in
+  parts; alerts that started between two of those parts were missing from the
+  counts.
+- **Checking a bouncer key no longer downloads every decision.** Setting up an
+  instance or adding a key through the repair fetched the whole decision list
+  just to see whether the key works — hundreds of thousands of entries with a
+  blocklist subscribed. It now asks about a single address.
+- **Diagnostics leave out the machine name and the host everywhere.** Both
+  were already hidden in the configuration section but still showed up in the
+  raw metrics and in the error messages.
+- **The cards say what is wrong in your language.** A mistyped address in the
+  lookup card was answered with "No decision was selected". It now says the
+  address or range is not valid, and an invalid ban duration or a missing
+  bouncer key get a message of their own instead of an English one.
+
+### Changed
+
+- **Every bouncer is a device of its own, and a removed bouncer can be
+  deleted.** A bouncer taken out of CrowdSec (`cscli bouncers delete` or
+  `prune`) used to keep its entity, which could only be removed after
+  disabling it first, and was reported as stopped again after a few
+  intervals. Each bouncer now shows up as
+  a device connected via its CrowdSec instance; *Delete* on that device page
+  forgets it. A bouncer that still queries cannot be deleted — disable it to
+  ignore it instead.
+- **A banned range is stored as a range.** Banning a CIDR range such as
+  `192.0.2.0/24` from Home Assistant now gives the decision the scope `Range`,
+  the way `cscli decisions add --range` does, instead of `Ip`. Bans set before
+  the update keep their old scope until they expire.
+- **A malformed ban duration is refused right away.** Values such as `1h30`
+  (the last number has no unit) used to pass the check and then fail at
+  CrowdSec with a less helpful message. Write `1h30m` instead.
+
+### Upgrade notes
+
+- **The ban table and the IP lookup need a bouncer API key.** CrowdSec hands
+  the decision list to bouncers only — that was always the case, the
+  integration just tried the machine credentials first. Without a key nothing
+  is asked any more and Home Assistant offers a repair to add one
+  (`cscli bouncers add homeassistant`). The `Active decisions` sensor works
+  without a key as before.
+- **Bouncers moved to devices of their own.** Their entity IDs, names, history
+  and settings stay as they are. Anything that refers to the CrowdSec
+  *device* — device triggers and conditions, actions aimed at the device, an
+  area assigned through the device — no longer includes the bouncers; give the
+  bouncer devices an area of their own if needed. Going back to an older
+  version leaves the bouncer devices behind empty; they do no harm.
+
+### Features
+
+* Give every bouncer a device of its own that can be deleted ([80d595f](https://github.com/stefgo/ha-crowdsec-integration/commit/80d595ff04638fe54b1ce47e89c7cf3bd8421f52)), closes [#34](https://github.com/stefgo/ha-crowdsec-integration/issues/34)
+
+### Bug Fixes
+
+* Ban a CIDR range with the Range scope ([e934b8c](https://github.com/stefgo/ha-crowdsec-integration/commit/e934b8c34634266685f24d3627bf0d1c374dabc5))
+* Clear repair issues after a reload and with the entry ([8b1d547](https://github.com/stefgo/ha-crowdsec-integration/commit/8b1d5470ef7755cd14dc511e0517478218343af2))
+* Count the expiry of past bans from the fetch, not the alert ([2e9e0d1](https://github.com/stefgo/ha-crowdsec-integration/commit/2e9e0d1e702c76ec3970ed24ea4ac402154b488b))
+* Give every error of the cards a fitting text in both languages ([e637406](https://github.com/stefgo/ha-crowdsec-integration/commit/e637406038c131942827e171187c04de70d2bd14))
+* Keep the machine ID and the hosts out of every part of diagnostics ([c464945](https://github.com/stefgo/ha-crowdsec-integration/commit/c4649458295e713f814888582cd58223a5939add))
+* Offer "remove all for this address" only where it removes something ([0e0f791](https://github.com/stefgo/ha-crowdsec-integration/commit/0e0f791bb0ad40e798cdcaba6232b6b51b8c4182))
+* Overlap the parts of a split alert window by a minute ([5cf646b](https://github.com/stefgo/ha-crowdsec-integration/commit/5cf646b65d046718c5d993bb92cfa99e1f70c579))
+* Re-read the ban table right after a ban or an unban ([7e23639](https://github.com/stefgo/ha-crowdsec-integration/commit/7e236399c6780075c1d8450549b420e8ae72545c))
+* Read a 404 from the decision list as an empty list ([e6744ae](https://github.com/stefgo/ha-crowdsec-integration/commit/e6744ae1dba7b5ea3d0a9249ca1e4a2f4f1a06a5))
+* Read the decision list with the bouncer key only ([b75dd8c](https://github.com/stefgo/ha-crowdsec-integration/commit/b75dd8caf540351017aa8e9ddb139586dc441859)), closes [#33](https://github.com/stefgo/ha-crowdsec-integration/issues/33)
+* Refuse a ban duration that is not a whole Go duration ([48e21af](https://github.com/stefgo/ha-crowdsec-integration/commit/48e21af91106611c53cb1ebd2ded597750151f78))
+* Refuse an unban by address the guard cannot check ([32dc5a6](https://github.com/stefgo/ha-crowdsec-integration/commit/32dc5a6f5286b4d92ad949c6e26edc16f008c64c))
+* Remove the decisions of an address by a filter CrowdSec accepts ([d496d21](https://github.com/stefgo/ha-crowdsec-integration/commit/d496d211f5590edb81ae9a9979253f1b55618415))
+
+### Performance
+
+* Check the bouncer key with one address instead of the whole list ([bdca7f4](https://github.com/stefgo/ha-crowdsec-integration/commit/bdca7f4b8e6977a6554c6507200a60d1a3d62e4e))
+
 ## [1.4.0](https://github.com/stefgo/ha-crowdsec-integration/compare/v1.3.6...v1.4.0) (2026-10-31)
 
 ### Each bouncer is watched on its own
