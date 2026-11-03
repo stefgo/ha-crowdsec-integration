@@ -30,7 +30,7 @@ jobs:
           category: integration
 
   lint:
-    name: ruff and mypy
+    name: pre-commit and mypy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -38,8 +38,10 @@ jobs:
         with:
           python-version: "3.14"
       - run: pip install -r requirements_test.txt
-      - run: ruff check .
-      - run: ruff format --check .
+      # The hooks a commit runs locally, at the versions .pre-commit-config.yaml
+      # pins — ruff included, so there is no second ruff version to drift, and
+      # Renovate's hook updates are checked before they are merged.
+      - run: pre-commit run --all-files --show-diff-on-failure
       # Only the Home-Assistant-free modules; see pyproject.toml.
       - run: mypy
 

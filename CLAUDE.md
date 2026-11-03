@@ -21,8 +21,10 @@ python -m pytest tests/test_decisions.py::test_name    # single test
 pip install -r requirements_test_ha.txt
 python -m pytest -c pytest_ha.ini
 
-# Lint and types (ruff over everything, mypy over the HA-free modules)
-ruff check . && ruff format --check . && mypy
+# Lint and types (the pre-commit hooks, ruff included, over everything; mypy
+# over the HA-free modules). The hook's rev is the only ruff version in the
+# project — CI runs the same command instead of installing ruff on its own.
+pre-commit run --all-files && mypy
 
 # Card
 npm --prefix card ci
