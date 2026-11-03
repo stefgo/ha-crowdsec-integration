@@ -3,8 +3,8 @@ name: TypeScript 7 probe
 # @rollup/plugin-typescript 12.3.0 cannot build with TypeScript 7: it reads
 # `ts.ModuleKind` at module scope, and the native port no longer exposes that
 # from the package root, so the bundle dies with "Cannot read properties of
-# undefined (reading 'ES2015')". .github/dependabot.yml therefore holds
-# typescript at 7.x. This job watches for the day that hold can come off.
+# undefined (reading 'ES2015')". .github/renovate.json5 therefore holds
+# typescript below 7. This job watches for the day that hold can come off.
 # Upstream: https://github.com/rollup/plugins/issues/2016
 #
 # It stays quiet while the answer is still "no": a job that reports red every
@@ -71,7 +71,7 @@ jobs:
           TYPECHECK: ${{ steps.probe.outputs.typecheck }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          title="TypeScript 7 builds the card again — the dependabot hold can come off"
+          title="TypeScript 7 builds the card again — the Renovate hold can come off"
 
           # Once, not once a week: the probe keeps succeeding until somebody
           # acts on it.
@@ -91,9 +91,9 @@ jobs:
 
           To act on it:
 
-          1. Drop the \`typescript\` entry under \`ignore:\` in
-             \`.github/dependabot.yml\` — dependabot will then offer the major
-             on its next run.
+          1. Drop the \`typescript\` rule (\`allowedVersions: "<7"\`) in
+             \`.github/renovate.json5\` — Renovate will then offer the major
+             in its next weekly window.
           2. Delete \`.github/workflows/typescript7-probe.yml\`; it has done
              its job.
           3. Check upstream https://github.com/rollup/plugins/issues/2016 for

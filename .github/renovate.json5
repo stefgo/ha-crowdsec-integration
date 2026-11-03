@@ -1,0 +1,30 @@
+// Dependency updates come from Renovate, run centrally from
+// https://github.com/stefgo/renovate-config — that preset sets the schedule,
+// the grouping, the commit types and the merge once every check is green.
+// Only what is particular to this repository is here.
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["github>stefgo/renovate-config"],
+  packageRules: [
+    {
+      // One pull request for rollup and its plugins: they are released
+      // together and a half-updated set rarely builds. Major updates only —
+      // minor and patch ones already travel in the preset's weekly group, and
+      // a group name here would pull them out of it again.
+      matchPackageNames: ["rollup", "@rollup/*"],
+      matchUpdateTypes: ["major"],
+      groupName: "rollup",
+    },
+    {
+      // TypeScript 7 is the native port, and its JavaScript API no longer has
+      // the shape @rollup/plugin-typescript reads: the build dies with
+      // "Cannot read properties of undefined (reading 'ES2015')" while the
+      // plugin's peer range (">=3.7.0") happily lets the install through.
+      // Tracked upstream in https://github.com/rollup/plugins/issues/2016 —
+      // .github/workflows/typescript7-probe.yml watches for the day this hold
+      // can come off. Deliberately 7.x only: TypeScript 6 builds fine.
+      matchPackageNames: ["typescript"],
+      allowedVersions: "<7",
+    },
+  ],
+}

@@ -102,9 +102,16 @@ sets `--import-mode=importlib` because module names collide otherwise.
 translations in sync; the card's vitest checks DE and EN carry the same keys and
 placeholders.
 
-Dependabot's pull requests are merged by
-`.github/workflows/dependabot-auto-merge.yml` once their Validate run is green; a red
-one stays open for a human.
+Dependency updates come from Renovate, run centrally from
+[stefgo/renovate-config](https://github.com/stefgo/renovate-config) (shared
+preset and the runner, daily at noon). Renovate opens its pull requests on
+Mondays — all minor and patch updates in one, each major update in its own,
+because it merges only one pull request per run — and merges them itself,
+squashed, on the first run after every check — Validate — is green; a red one
+stays open for a human, and so does an update of the Python or Node version
+the workflows run on. What is particular to this repository (the rollup
+group, the TypeScript 7 hold) lives in `.github/renovate.json5`. The commits
+are typed `ci(deps)` and `chore(deps)` and release nothing by themselves.
 
 ## Releasing
 
