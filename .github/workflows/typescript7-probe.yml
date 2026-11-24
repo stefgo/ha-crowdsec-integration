@@ -11,8 +11,16 @@ name: TypeScript 7 probe
 # Monday is a job nobody reads after the third week. Only the build turning
 # green produces anything — an issue saying so. Silence therefore means "still
 # broken", and a red run means the probe itself is broken, which is worth
-# seeing. Type-checking already passes under TypeScript 7; the plugin is the
-# only thing in the way, so the build is what decides.
+# seeing. Type-checking already passes under TypeScript 7.
+#
+# The plugin is not the only thing in the way: typescript-eslint declares a
+# peer range for typescript that ends below 7, so npm refuses to install 7
+# next to it. That is checked on its own, without forcing anything, because
+# the Renovate pull request will run `npm ci` under the same peer rules. For
+# the build and the type check the conflict is set aside (--legacy-peer-deps)
+# — neither touches ESLint, and without it the install would fail every week
+# and the build would never be tried. The issue is raised only once both
+# answers are "yes"; the run summary shows both every week.
 
 on:
   schedule:
@@ -37,10 +45,22 @@ jobs:
 
       # These two are ordinary steps on purpose: if the install itself breaks,
       # the job goes red rather than passing the failure off as "TypeScript 7
-      # still does not work". Only the build below may fail quietly.
+      # still does not work". Only the peer check and the build below may
+      # fail quietly.
       - run: npm --prefix card ci
       - name: Install TypeScript 7 over the pinned version
-        run: npm --prefix card install --no-save --no-package-lock typescript@7
+        run: npm --prefix card install --no-save --no-package-lock --legacy-peer-deps typescript@7
+
+      # A dry run, so it changes nothing: would npm accept TypeScript 7 next to
+      # the dependencies as they stand, peer ranges included?
+      - name: Do the peer ranges admit TypeScript 7?
+        id: peers
+        run: |
+          if npm --prefix card install --dry-run --no-save --no-package-lock typescript@7; then
+            echo "peers=ok" >> "$GITHUB_OUTPUT"
+          else
+            echo "peers=blocked" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Try to build with it
         id: probe
@@ -63,15 +83,29 @@ jobs:
             echo "typecheck=failed" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Summary
+        env:
+          TS_VERSION: ${{ steps.probe.outputs.version }}
+          BUILD: ${{ steps.probe.outputs.build }}
+          TYPECHECK: ${{ steps.probe.outputs.typecheck }}
+          PEERS: ${{ steps.peers.outputs.peers }}
+        run: |
+          {
+            echo "### TypeScript $TS_VERSION"
+            echo "- Build: \`$BUILD\`"
+            echo "- Type check: \`$TYPECHECK\`"
+            echo "- Peer ranges: \`$PEERS\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Say so, once, when it works
-        if: steps.probe.outputs.build == 'ok'
+        if: steps.probe.outputs.build == 'ok' && steps.peers.outputs.peers == 'ok'
         env:
           GH_TOKEN: ${{ github.token }}
           TS_VERSION: ${{ steps.probe.outputs.version }}
           TYPECHECK: ${{ steps.probe.outputs.typecheck }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          title="TypeScript 7 builds the card again — the Renovate hold can come off"
+          title="TypeScript 7 builds the card and installs cleanly — the Renovate hold can come off"
 
           # Once, not once a week: the probe keeps succeeding until somebody
           # acts on it.
@@ -83,9 +117,12 @@ jobs:
 
           cat > "$RUNNER_TEMP/issue.md" <<MARKDOWN
           The weekly probe built the card with TypeScript \`$TS_VERSION\`, so
-          \`@rollup/plugin-typescript\` evidently handles the native port now.
+          \`@rollup/plugin-typescript\` evidently handles the native port now,
+          and npm installs it without a peer conflict, so typescript-eslint
+          accepts it as well.
 
           - Bundle: built
+          - Peer ranges: ok
           - Type check: \`$TYPECHECK\`
           - Probe run: $RUN_URL
 
